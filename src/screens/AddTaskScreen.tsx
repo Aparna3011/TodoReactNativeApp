@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Platform,
@@ -11,9 +11,21 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {useNavigation} from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 
-import {addTodo} from '../database/todoRepository';
+import { addTodo } from '../database/todoRepository';
+
+/**
+ * Formats a Date as a local calendar date string in YYYY-MM-DD format
+ * using local timezone values. This avoids the UTC shift introduced by
+ * toISOString(), which can change the selected day in off-UTC timezones.
+ */
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function AddTaskScreen(): React.JSX.Element {
   const navigation = useNavigation();
@@ -22,13 +34,17 @@ function AddTaskScreen(): React.JSX.Element {
   const [endDate, setEndDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Minimum selectable date = today's local calendar date (start of day, so today stays selectable..
+  const minimumDate = new Date();
+  minimumDate.setHours(0, 0, 0, 0);
+
   const handleSave = async () => {
     if (!taskName.trim()) {
       Alert.alert('Required', 'Please enter a task name.');
       return;
     }
 
-    const formattedDate = endDate.toISOString().split('T')[0];
+    const formattedDate = formatDateLocal(endDate);
 
     await addTodo(taskName.trim(), formattedDate);
 
@@ -56,10 +72,9 @@ function AddTaskScreen(): React.JSX.Element {
 
         <TouchableOpacity
           style={styles.dateButton}
-          onPress={() => setShowDatePicker(true)}>
-          <Text style={styles.dateText}>
-            {endDate.toLocaleDateString()}
-          </Text>
+          onPress={() => setShowDatePicker(true)}
+        >
+          <Text style={styles.dateText}>{endDate.toLocaleDateString()}</Text>
         </TouchableOpacity>
 
         {showDatePicker && (
@@ -67,19 +82,18 @@ function AddTaskScreen(): React.JSX.Element {
             value={endDate}
             mode="date"
             display={Platform.OS === 'android' ? 'calendar' : 'default'}
+            minimumDate={minimumDate}
             onChange={(event, selectedDate) => {
               setShowDatePicker(false);
 
-              if (selectedDate) {
+              if (event.type === 'set' && selectedDate) {
                 setEndDate(selectedDate);
               }
             }}
           />
         )}
 
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSave}>
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveText}>Save Task</Text>
         </TouchableOpacity>
       </View>
