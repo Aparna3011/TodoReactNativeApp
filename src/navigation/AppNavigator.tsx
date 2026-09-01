@@ -1,7 +1,7 @@
 import React from 'react';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
-import HomeScreen from '../screens/HomeScreen';
+import BottomTabNavigator from './BottomTabNavigator';
 import AddTaskScreen from '../screens/AddTaskScreen';
 import EditTaskScreen from '../screens/EditTaskScreen';
 
@@ -30,7 +30,7 @@ function AppNavigator(): React.JSX.Element {
       }}>
       <Stack.Screen
         name="Home"
-        component={HomeScreen}
+        component={BottomTabNavigator}
       />
 
       <Stack.Screen
