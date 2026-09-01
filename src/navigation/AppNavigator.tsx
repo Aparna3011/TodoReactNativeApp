@@ -4,18 +4,13 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import BottomTabNavigator from './BottomTabNavigator';
 import AddTaskScreen from '../screens/AddTaskScreen';
 import EditTaskScreen from '../screens/EditTaskScreen';
+import type {Todo} from '../types/todo';
 
 export type RootStackParamList = {
   Home: undefined;
   AddTask: undefined;
   EditTask: {
-    todo: {
-      id: number;
-      task_name: string;
-      end_date: string;
-      completed: number;
-      created_at: string;
-    };
+    todo: Todo;
   };
 };
 
