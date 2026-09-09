@@ -75,26 +75,6 @@ const TAB_BAR_LABELS: Record<keyof MainTabParamList, string> = {
   Stats: 'Stats',
   Profile: 'Profile',
 };
-
-/**
- * Controlled custom tab bar that explicitly isolates the application's visible
- * clickable tab buttons from the physical Android 3-button / gesture system
- * navigation bar.
- *
- * Physical Layout Structure:
- * ┌────────────────────────────────────────────────────────┐
- * │ Tab bar container (Height: 56 + insets.bottom)         │
- * │  ┌──────────────────────────────────────────────────┐  │
- * │  │ Visible Tab Content (Height: 56dp)               │  │
- * │  │  Tasks      Calendar      Stats       Profile    │  │
- * │  └──────────────────────────────────────────────────┘  │
- * │  ┌──────────────────────────────────────────────────┐  │
- * │  │ System Navigation Spacer (Height: insets.bottom) │  │
- * │  │ (Non-clickable space reserved for Android        │  │
- * │  │  3-button [Back | Home | Recents] / gesture bar) │  │
- * │  └──────────────────────────────────────────────────┘  │
- * └────────────────────────────────────────────────────────┘
- */
 function ControlledBottomTabBar({
   state,
   descriptors,
