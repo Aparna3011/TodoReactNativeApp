@@ -1,23 +1,37 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList,
+  Alert,
+  AppState,
   Modal,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import { useFocusEffect } from '@react-navigation/native';
 import { CalendarDays } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 
-import { getTodos } from '../database/todoRepository';
+import {
+  addTodo,
+  deleteTodo,
+  getTodos,
+  toggleTodo,
+  updateTodo,
+} from '../database/todoRepository';
+
 import type { Todo } from '../types/todo';
 
-/** Formats a YYYY-MM-DD end date into a human-friendly label using local time. */
+/* =========================================================
+   DATE HELPERS
+   ========================================================= */
+
 function formatDateLabel(endDate: string): string {
   const [year, month, day] = endDate.split('-').map(part => Number(part));
 
@@ -45,12 +59,77 @@ function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * IMPORTANT:
+ * Store the selected calendar date using local calendar values.
+ *
+ * Do NOT use:
+ * date.toISOString().split('T')[0]
+ *
+ * because UTC conversion can move the date by one day.
+ */
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function dateFromDateString(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+
+  return new Date(year, month - 1, day);
+}
+
+/* =========================================================
+   CALENDAR SCREEN
+   ========================================================= */
+
 function CalendarScreen(): React.JSX.Element {
   const [todos, setTodos] = useState<Todo[]>([]);
+
   const [selectedDate, setSelectedDate] = useState<string>(
     getTodayDateString(),
   );
-  const [taskModalVisible, setTaskModalVisible] = useState(false);
+
+  /* Add/Edit modal */
+  const [taskEditorVisible, setTaskEditorVisible] = useState(false);
+
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+
+  const [taskName, setTaskName] = useState('');
+
+  const [endDate, setEndDate] = useState<Date>(
+    dateFromDateString(getTodayDateString()),
+  );
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  /*
+   * Live "today" tracking.
+   *
+   * lastTodayRef remembers which date was "today" the last time this
+   * screen was active, so a stale "today" selection can be advanced
+   * to the real current date. setTodayTick forces a re-render when
+   * the app comes back from the background so the calendar updates
+   * immediately.
+   */
+  const lastTodayRef = useRef(getTodayDateString());
+
+  const [, setTodayTick] = useState(0);
+
+  /*
+   * Which month the calendar should display. Updated only when
+   * "today" rolls over into a new month, so the view follows the
+   * live date after a midnight month roll-over. User navigation
+   * with the calendar arrows is never overridden.
+   */
+  const [calendarAnchor, setCalendarAnchor] = useState(getTodayDateString());
+
+  /* =======================================================
+     LOAD TODOS
+     ======================================================= */
 
   const loadTodos = useCallback(async () => {
     try {
@@ -61,21 +140,72 @@ function CalendarScreen(): React.JSX.Element {
     }
   }, []);
 
+  /* =======================================================
+     LIVE "TODAY" SYNC
+     ======================================================= */
+
+  const syncToLiveToday = useCallback(() => {
+    const today = getTodayDateString();
+
+    const prevToday = lastTodayRef.current;
+
+    /*
+     * If the calendar was still pointing at what used to be "today"
+     * (for example the app stayed open overnight), advance the
+     * selection onto the new current date.
+     *
+     * A date the user picked manually is never overridden.
+     */
+    if (selectedDate === prevToday) {
+      setSelectedDate(today);
+
+      /*
+       * If "today" moved into a different month, re-anchor the
+       * visible month so the calendar keeps pointing at the new
+       * current date even after a midnight month roll-over.
+       */
+      if (today.slice(0, 7) !== prevToday.slice(0, 7)) {
+        setCalendarAnchor(today);
+      }
+    }
+
+    lastTodayRef.current = today;
+  }, [selectedDate]);
+
   useFocusEffect(
     useCallback(() => {
+      /*
+       * Every time this tab gains focus, refresh "today" so the
+       * calendar keeps pointing at the real current date.
+       */
+      syncToLiveToday();
+
       loadTodos();
-    }, [loadTodos]),
+    }, [syncToLiveToday, loadTodos]),
   );
 
-  /**
-   * Group all todos by their end date.
-   *
-   * Example:
-   * {
-   *   "2026-09-14": [todo1, todo2, todo3],
-   *   "2026-09-15": [todo4]
-   * }
+  /*
+   * The Calendar tab stays mounted while the app is backgrounded.
+   * When the app comes back (possibly on a new day), refresh the
+   * calendar so the today marker and the selection follow the
+   * real current date.
    */
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        syncToLiveToday();
+
+        setTodayTick(tick => tick + 1);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [syncToLiveToday]);
+
+  /* =======================================================
+     GROUP TODOS BY DATE
+     ======================================================= */
+
   const todosByDate = useMemo(() => {
     const grouped: Record<string, Todo[]> = {};
 
@@ -94,14 +224,18 @@ function CalendarScreen(): React.JSX.Element {
     return grouped;
   }, [todos]);
 
+  /* =======================================================
+     SELECTED DATE TODOS
+     ======================================================= */
+
   const selectedTodos = useMemo(() => {
     return todosByDate[selectedDate] ?? [];
   }, [todosByDate, selectedDate]);
 
-  /**
-   * Mark dates that contain tasks.
-   * Selection is also maintained here.
-   */
+  /* =======================================================
+     CALENDAR MARKED DATES
+     ======================================================= */
+
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
 
@@ -124,11 +258,152 @@ function CalendarScreen(): React.JSX.Element {
     return marked;
   }, [todos, selectedDate]);
 
-  /**
-   * Custom calendar day.
-   *
-   * This is what makes tasks appear INSIDE each date cell.
-   */
+  /* =======================================================
+     SELECT DATE
+     ======================================================= */
+
+  const handleSelectDate = useCallback((date: string) => {
+    setSelectedDate(date);
+  }, []);
+
+  /* =======================================================
+     OPEN ADD TASK
+     ======================================================= */
+
+  const openAddTask = useCallback(() => {
+    setEditingTodo(null);
+    setTaskName('');
+
+    /*
+     * New task starts with the currently selected
+     * calendar date.
+     */
+    setEndDate(dateFromDateString(selectedDate));
+
+    setShowDatePicker(false);
+    setTaskEditorVisible(true);
+  }, [selectedDate]);
+
+  /* =======================================================
+     OPEN EDIT TASK
+     ======================================================= */
+
+  const openEditTask = useCallback((todo: Todo) => {
+    setEditingTodo(todo);
+    setTaskName(todo.task_name);
+
+    /*
+     * Existing end_date is stored as YYYY-MM-DD.
+     */
+    setEndDate(dateFromDateString(todo.end_date));
+
+    setShowDatePicker(false);
+    setTaskEditorVisible(true);
+  }, []);
+
+  /* =======================================================
+     CLOSE ADD/EDIT MODAL
+     ======================================================= */
+
+  const closeTaskEditor = useCallback(() => {
+    setTaskEditorVisible(false);
+    setEditingTodo(null);
+    setTaskName('');
+    setEndDate(dateFromDateString(selectedDate));
+    setShowDatePicker(false);
+  }, [selectedDate]);
+
+  /* =======================================================
+     SAVE / UPDATE TASK
+     ======================================================= */
+
+  const saveTask = useCallback(async () => {
+    const name = taskName.trim();
+
+    if (!name) {
+      Alert.alert('Task required', 'Please enter a task name.');
+      return;
+    }
+
+    const date = formatDateLocal(endDate);
+
+    try {
+      if (editingTodo) {
+        await updateTodo(editingTodo.id, name, date);
+      } else {
+        await addTodo(name, date);
+      }
+
+      /*
+       * If the date was changed while editing,
+       * show the date containing the task.
+       */
+      setSelectedDate(date);
+
+      closeTaskEditor();
+
+      await loadTodos();
+    } catch (error) {
+      console.error('Failed to save task:', error);
+
+      Alert.alert('Error', 'Unable to save the task.');
+    }
+  }, [taskName, endDate, editingTodo, closeTaskEditor, loadTodos]);
+
+  /* =======================================================
+     COMPLETE / PENDING
+     ======================================================= */
+
+  const handleToggle = useCallback(
+    async (todo: Todo) => {
+      try {
+        await toggleTodo(todo.id, todo.completed);
+
+        await loadTodos();
+      } catch (error) {
+        console.error('Failed to update task status:', error);
+
+        Alert.alert('Error', 'Unable to update task status.');
+      }
+    },
+    [loadTodos],
+  );
+
+  /* =======================================================
+     DELETE
+     ======================================================= */
+
+  const handleDelete = useCallback(
+    (todo: Todo) => {
+      Alert.alert('Delete Task', `Delete "${todo.task_name}"?`, [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTodo(todo.id);
+
+              await loadTodos();
+            } catch (error) {
+              console.error('Failed to delete task:', error);
+
+              Alert.alert('Error', 'Unable to delete the task.');
+            }
+          },
+        },
+      ]);
+    },
+    [loadTodos],
+  );
+
+  /* =======================================================
+     CUSTOM CALENDAR DAY
+     ======================================================= */
+
   const renderDay = useCallback(
     ({
       date,
@@ -143,15 +418,31 @@ function CalendarScreen(): React.JSX.Element {
       };
       state?: string;
     }) => {
-      if (!date) return null;
+      if (!date) {
+        return null;
+      }
 
       const dateKey = date.dateString;
+
       const dayTodos = todosByDate[dateKey] ?? [];
 
       const isSelected = dateKey === selectedDate;
+
       const isDisabled = state === 'disabled';
 
-      const visibleTodos = dayTodos.slice(0, 4);
+      /*
+       * Live "today": recomputed on every render, so the today marker
+       * moves with the real current date (even inside a custom cell).
+       */
+      const isToday = dateKey === getTodayDateString();
+
+      /*
+       * Only show two tasks inside a calendar cell.
+       * The remaining tasks are shown in the selected
+       * date section below.
+       */
+      const visibleTodos = dayTodos.slice(0, 2);
+
       const remainingCount = dayTodos.length - visibleTodos.length;
 
       return (
@@ -159,17 +450,13 @@ function CalendarScreen(): React.JSX.Element {
           style={[styles.calendarDay, isSelected && styles.calendarDaySelected]}
         >
           {/* DATE NUMBER */}
+
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => {
-              setSelectedDate(dateKey);
-
-              if (dayTodos.length > 0) {
-                setTaskModalVisible(true);
-              }
-            }}
+            onPress={() => handleSelectDate(dateKey)}
             style={[
               styles.dayNumberContainer,
+              isToday && styles.dayNumberContainerToday,
               isSelected && styles.dayNumberContainerSelected,
             ]}
           >
@@ -177,6 +464,7 @@ function CalendarScreen(): React.JSX.Element {
               style={[
                 styles.dayNumber,
                 isDisabled && styles.dayNumberDisabled,
+                isToday && styles.dayNumberToday,
                 isSelected && styles.dayNumberSelected,
               ]}
             >
@@ -184,7 +472,8 @@ function CalendarScreen(): React.JSX.Element {
             </Text>
           </TouchableOpacity>
 
-          {/* TASKS INSIDE DATE CELL */}
+          {/* TASKS INSIDE CALENDAR CELL */}
+
           <View style={styles.calendarTaskList}>
             {visibleTodos.map(todo => {
               const completed = todo.completed === 1;
@@ -194,8 +483,9 @@ function CalendarScreen(): React.JSX.Element {
                   key={String(todo.id)}
                   activeOpacity={0.7}
                   onPress={() => {
-                    setSelectedDate(dateKey);
-                    setTaskModalVisible(true);
+                    handleSelectDate(dateKey);
+
+                    openEditTask(todo);
                   }}
                   style={[
                     styles.calendarTask,
@@ -218,238 +508,368 @@ function CalendarScreen(): React.JSX.Element {
             })}
 
             {/* MORE TASKS */}
+
             {remainingCount > 0 && (
               <TouchableOpacity
                 activeOpacity={0.7}
-                onPress={() => {
-                  setSelectedDate(dateKey);
-                  setTaskModalVisible(true);
-                }}
+                onPress={() => handleSelectDate(dateKey)}
                 style={styles.moreTasksContainer}
               >
-                <Text style={styles.moreTasksText}>...</Text>
-                {/* <Text style={styles.moreTasksText}>+{remainingCount} more</Text> */}
+                <Text style={styles.moreTasksText}>+{remainingCount} more</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
       );
     },
-    [todosByDate, selectedDate],
+    [todosByDate, selectedDate, handleSelectDate, openEditTask],
   );
+
+  /* =======================================================
+     RENDER
+     ======================================================= */
 
   return (
     <SafeAreaScreen style={styles.safeArea} edges={TAB_SCREEN_EDGES}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerIcon}>
-            <CalendarDays size={24} color="#222222" />
-          </View>
-
-          <View>
-            <Text style={styles.title}>Calendar</Text>
-
-            <Text style={styles.subtitle}>View your tasks by date</Text>
-          </View>
-        </View>
-
-        {/* Calendar */}
-        <View style={styles.calendarWrapper}>
-          <Calendar
-            current={selectedDate}
-            markedDates={markedDates}
-            dayComponent={renderDay}
-            onDayPress={day => {
-              setSelectedDate(day.dateString);
-
-              const dateTodos = todosByDate[day.dateString] ?? [];
-
-              if (dateTodos.length > 0) {
-                setTaskModalVisible(true);
-              }
-            }}
-            theme={{
-              backgroundColor: '#f7f7f7',
-              calendarBackground: '#f7f7f7',
-              textSectionTitleColor: '#777777',
-              monthTextColor: '#222222',
-              textMonthFontSize: 20,
-              textMonthFontWeight: '700',
-              arrowColor: '#222222',
-              textDayHeaderFontSize: 13,
-              textDayHeaderFontWeight: '600',
-              todayTextColor: '#120ef8',
-            }}
-            style={styles.calendar}
-          />
-        </View>
-
-        {/* ================= TASK MODAL ================= */}
-        <Modal
-          visible={taskModalVisible}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setTaskModalVisible(false)}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.modalOverlay}>
-            {/* Tap outside modal to close */}
+          {/* =================================================
+              HEADER
+              ================================================= */}
+
+          <View style={styles.header}>
+            <View style={styles.headerIcon}>
+              <CalendarDays size={24} color="#222222" />
+            </View>
+
+            <View>
+              <Text style={styles.title}>Calendar</Text>
+
+              <Text style={styles.subtitle}>View your tasks by date</Text>
+            </View>
+          </View>
+
+          {/* =================================================
+              CALENDAR
+              ================================================= */}
+
+          <View style={styles.calendarWrapper}>
+            <Calendar
+              current={selectedDate}
+              initialDate={calendarAnchor}
+              markedDates={markedDates}
+              dayComponent={renderDay}
+              onDayPress={day => {
+                handleSelectDate(day.dateString);
+              }}
+              theme={{
+                backgroundColor: '#f7f7f7',
+
+                calendarBackground: '#f7f7f7',
+
+                textSectionTitleColor: '#777777',
+
+                monthTextColor: '#222222',
+
+                textMonthFontSize: 20,
+
+                textMonthFontWeight: '700',
+
+                arrowColor: '#222222',
+
+                textDayHeaderFontSize: 13,
+
+                textDayHeaderFontWeight: '600',
+
+                todayTextColor: '#120ef8',
+              }}
+              style={styles.calendar}
+            />
+          </View>
+
+          {/* =================================================
+              SELECTED DATE HEADER
+              ================================================= */}
+
+          <View style={styles.selectedDateHeader}>
+            <View style={styles.selectedDateInfo}>
+              <Text style={styles.selectedDateTitle}>
+                {formatDateLabel(selectedDate)}
+              </Text>
+
+              <Text style={styles.selectedDateSubtitle}>
+                {selectedTodos.length === 0
+                  ? 'No tasks scheduled'
+                  : `${selectedTodos.length} ${
+                      selectedTodos.length === 1 ? 'task' : 'tasks'
+                    } scheduled`}
+              </Text>
+            </View>
+
+            <View style={styles.selectedDateActions}>
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>
+                  {selectedTodos.length}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={openAddTask}
+                style={styles.addTaskButton}
+              >
+                <Text style={styles.addTaskButtonText}>+ Add Task</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* =================================================
+              SELECTED DATE TASKS
+              ================================================= */}
+
+          <View style={styles.taskSection}>
+            {selectedTodos.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>No tasks yet</Text>
+
+                <Text style={styles.emptySubtitle}>
+                  Add a task for this date using the button above.
+                </Text>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={openAddTask}
+                  style={styles.emptyAddButton}
+                >
+                  <Text style={styles.emptyAddButtonText}>+ Add Task</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              selectedTodos.map(todo => {
+                const completed = todo.completed === 1;
+
+                return (
+                  <View
+                    key={String(todo.id)}
+                    style={[
+                      styles.taskRow,
+                      completed && styles.taskRowCompleted,
+                    ]}
+                  >
+                    {/* CHECKBOX */}
+
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => handleToggle(todo)}
+                      style={[
+                        styles.checkbox,
+                        completed && styles.checkboxCompleted,
+                      ]}
+                    >
+                      {completed && <Text style={styles.checkmark}>✓</Text>}
+                    </TouchableOpacity>
+
+                    {/* TASK CONTENT */}
+
+                    <View style={styles.taskTextContainer}>
+                      <Text
+                        numberOfLines={2}
+                        style={[
+                          styles.taskName,
+                          completed && styles.taskNameCompleted,
+                        ]}
+                      >
+                        {todo.task_name}
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.taskStatus,
+                          completed
+                            ? styles.taskStatusCompleted
+                            : styles.taskStatusPending,
+                        ]}
+                      >
+                        {completed ? 'Completed' : 'Pending'}
+                      </Text>
+                    </View>
+
+                    {/* EDIT */}
+
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => openEditTask(todo)}
+                      style={styles.editButton}
+                    >
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
+
+                    {/* DELETE */}
+
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => handleDelete(todo)}
+                      style={styles.deleteButton}
+                    >
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        </ScrollView>
+
+        {/* ===================================================
+            ADD / EDIT TASK MODAL
+            =================================================== */}
+
+        <Modal
+          visible={taskEditorVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={closeTaskEditor}
+        >
+          <View style={styles.editorOverlay}>
+            {/* BACKDROP */}
+
             <Pressable
-              style={styles.modalBackdrop}
-              onPress={() => setTaskModalVisible(false)}
+              style={styles.editorBackdrop}
+              onPress={closeTaskEditor}
             />
 
-            {/* Modal content */}
-            <View style={styles.taskModal}>
-              {/* Header */}
-              <View style={styles.modalHeader}>
-                <View style={styles.modalHeaderText}>
-                  <Text style={styles.modalTitle}>
-                    {formatDateLabel(selectedDate)}
+            {/* MODAL */}
+
+            <View style={styles.editorModal}>
+              {/* HEADER */}
+
+              <View style={styles.editorHeader}>
+                <View style={styles.editorHeaderText}>
+                  <Text style={styles.editorTitle}>
+                    {editingTodo ? 'Edit Task' : 'Add Task'}
                   </Text>
 
-                  <Text style={styles.modalSubtitle}>
-                    {selectedTodos.length}{' '}
-                    {selectedTodos.length === 1 ? 'task' : 'tasks'}
+                  <Text style={styles.editorSubtitle}>
+                    {editingTodo
+                      ? 'Update task details'
+                      : 'Create a task for the selected date'}
                   </Text>
                 </View>
 
                 <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => setTaskModalVisible(false)}
-                  style={styles.closeButton}
+                  activeOpacity={0.8}
+                  onPress={closeTaskEditor}
+                  style={styles.editorCloseButton}
                 >
-                  <Text style={styles.closeButtonText}>×</Text>
+                  <Text style={styles.editorCloseText}>×</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Tasks */}
-              <FlatList
-                data={selectedTodos}
-                keyExtractor={item => String(item.id)}
+              {/* FORM */}
+
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.modalTaskList}
-                renderItem={({ item }) => {
-                  const completed = item.completed === 1;
+                contentContainerStyle={styles.editorContent}
+              >
+                {/* TASK NAME */}
 
-                  return (
-                    <View style={styles.modalTaskRow}>
-                      <View
-                        style={[
-                          styles.modalTaskIcon,
-                          completed
-                            ? styles.modalTaskIconCompleted
-                            : styles.modalTaskIconPending,
-                        ]}
-                      >
-                        {completed && <Text style={styles.modalCheck}>✓</Text>}
-                      </View>
+                <Text style={styles.inputLabel}>Task Name</Text>
 
-                      <View style={styles.modalTaskContent}>
-                        <Text
-                          style={[
-                            styles.modalTaskName,
-                            completed && styles.modalTaskNameCompleted,
-                          ]}
-                        >
-                          {item.task_name}
-                        </Text>
+                <TextInput
+                  value={taskName}
+                  onChangeText={setTaskName}
+                  placeholder="Enter task name"
+                  placeholderTextColor="#999999"
+                  style={styles.taskInput}
+                  returnKeyType="done"
+                />
 
-                        <Text
-                          style={[
-                            styles.modalTaskStatus,
-                            completed
-                              ? styles.modalStatusCompleted
-                              : styles.modalStatusPending,
-                          ]}
-                        >
-                          {completed ? 'Completed' : 'Pending'}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                }}
-              />
+                {/* END DATE */}
+
+                <Text style={styles.inputLabel}>End Date</Text>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setShowDatePicker(true)}
+                  style={styles.dateInput}
+                >
+                  <Text style={styles.dateInputText}>
+                    {formatDateLabel(formatDateLocal(endDate))}
+                  </Text>
+
+                  <Text style={styles.calendarEmoji}>📅</Text>
+                </TouchableOpacity>
+
+                {/* DATE PICKER */}
+
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={endDate}
+                    mode="date"
+                    display="calendar"
+                    onChange={(event, selected) => {
+                      /*
+                       * Android sends a dismissed
+                       * event when the user cancels.
+                       *
+                       * Do not change the current
+                       * date in that case.
+                       */
+                      if (event.type === 'dismissed') {
+                        setShowDatePicker(false);
+                        return;
+                      }
+
+                      if (selected) {
+                        setEndDate(selected);
+                      }
+
+                      setShowDatePicker(false);
+                    }}
+                  />
+                )}
+
+                {/* BUTTONS */}
+
+                <View style={styles.editorButtons}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={closeTaskEditor}
+                    style={styles.cancelButton}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={saveTask}
+                    style={styles.saveButton}
+                  >
+                    <Text style={styles.saveButtonText}>
+                      {editingTodo ? 'Update Task' : 'Add Task'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>
-
-        {/* Selected date information */}
-
-        {/* Selected date information */}
-        <View style={styles.selectedDateHeader}>
-          <View style={styles.selectedDateInfo}>
-            <Text style={styles.selectedDateTitle}>
-              {formatDateLabel(selectedDate)}
-            </Text>
-
-            <Text style={styles.selectedDateSubtitle}>
-              {selectedTodos.length === 0
-                ? 'No tasks scheduled'
-                : `${selectedTodos.length} ${
-                    selectedTodos.length === 1 ? 'task' : 'tasks'
-                  }`}
-            </Text>
-          </View>
-
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{selectedTodos.length}</Text>
-          </View>
-        </View>
-
-        {/* Selected date task list */}
-        <FlatList
-          data={selectedTodos}
-          keyExtractor={item => String(item.id)}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <View style={styles.taskRow}>
-              <View
-                style={[
-                  styles.taskDot,
-                  item.completed === 1 && styles.taskDotCompleted,
-                ]}
-              />
-
-              <View style={styles.taskTextContainer}>
-                <Text
-                  style={[
-                    styles.taskName,
-                    item.completed === 1 && styles.taskNameCompleted,
-                  ]}
-                >
-                  {item.task_name}
-                </Text>
-              </View>
-
-              <Text
-                style={[
-                  styles.taskStatus,
-                  item.completed === 1
-                    ? styles.taskStatusCompleted
-                    : styles.taskStatusPending,
-                ]}
-              >
-                {item.completed === 1 ? 'Completed' : 'Pending'}
-              </Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No tasks yet</Text>
-
-              <Text style={styles.emptySubtitle}>
-                Tasks with end dates will appear inside their calendar dates.
-              </Text>
-            </View>
-          }
-        />
       </View>
     </SafeAreaScreen>
   );
 }
+
+/* ===========================================================
+   STYLES
+   =========================================================== */
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -462,7 +882,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#f7f7f7',
   },
 
-  /* Header */
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    paddingBottom: 30,
+  },
+
+  /* ========================================================
+     HEADER
+     ======================================================== */
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -495,7 +926,10 @@ const styles = StyleSheet.create({
     color: '#777777',
   },
 
-  /* Calendar */
+  /* ========================================================
+     CALENDAR
+     ======================================================== */
+
   calendarWrapper: {
     backgroundColor: '#f7f7f7',
     paddingHorizontal: 4,
@@ -505,21 +939,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#f7f7f7',
   },
 
-  /*
-   * Individual date cell.
-   *
-   * The height is intentionally larger than the
-   * default calendar cell because tasks are displayed
-   * inside it.
-   */
   calendarDay: {
     width: '100%',
-    minHeight: 92,
-    paddingHorizontal: 3,
-    paddingTop: 4,
-    paddingBottom: 4,
+    height: 82,
+    paddingHorizontal: 2,
+    paddingTop: 3,
+    paddingBottom: 3,
     alignItems: 'stretch',
     justifyContent: 'flex-start',
+    overflow: 'hidden',
   },
 
   calendarDaySelected: {
@@ -527,21 +955,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
-  /* Date number */
   dayNumberContainer: {
-    height: 26,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 3,
+    marginBottom: 2,
   },
 
   dayNumberContainerSelected: {
     alignSelf: 'center',
     minWidth: 32,
-    height: 32,
-    borderRadius: 16,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#120ef8',
-    marginBottom: 1,
+    marginBottom: 0,
   },
 
   dayNumber: {
@@ -558,17 +985,35 @@ const styles = StyleSheet.create({
     color: '#aaaaaa',
   },
 
-  /* Tasks inside calendar */
+  /*
+   * Ring around today's day number so the calendar always "points
+   * at" the real current date. The filled pill still wins when the
+   * user selects today itself.
+   */
+  dayNumberContainerToday: {
+    alignSelf: 'center',
+    minWidth: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: '#120ef8',
+    marginBottom: 0,
+  },
+
+  dayNumberToday: {
+    color: '#120ef8',
+  },
+
   calendarTaskList: {
     width: '100%',
-    gap: 2,
   },
 
   calendarTask: {
     width: '100%',
-    minHeight: 19,
-    borderRadius: 5,
-    paddingHorizontal: 4,
+    minHeight: 16,
+    borderRadius: 4,
+    paddingHorizontal: 3,
+    marginBottom: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -583,7 +1028,7 @@ const styles = StyleSheet.create({
 
   calendarTaskCheck: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '800',
     marginRight: 2,
   },
@@ -591,26 +1036,26 @@ const styles = StyleSheet.create({
   calendarTaskText: {
     flex: 1,
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '500',
   },
 
-  calendarTaskTextDisabled: {
-    opacity: 0.65,
-  },
-
   moreTasksContainer: {
-    paddingHorizontal: 3,
+    paddingHorizontal: 2,
     marginTop: 1,
   },
 
   moreTasksText: {
     fontSize: 9,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#666666',
+    lineHeight: 11,
   },
 
-  /* Selected date section */
+  /* ========================================================
+     SELECTED DATE HEADER
+     ======================================================== */
+
   selectedDateHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -626,6 +1071,7 @@ const styles = StyleSheet.create({
 
   selectedDateInfo: {
     flex: 1,
+    paddingRight: 10,
   },
 
   selectedDateTitle: {
@@ -640,14 +1086,20 @@ const styles = StyleSheet.create({
     color: '#777777',
   },
 
+  selectedDateActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
   countBadge: {
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#222222',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
+    marginRight: 8,
   },
 
   countBadgeText: {
@@ -656,36 +1108,70 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  /* Bottom task list */
-  list: {
+  addTaskButton: {
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    backgroundColor: '#120ef8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  addTaskButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  /* ========================================================
+     TASK SECTION
+     ======================================================== */
+
+  taskSection: {
     padding: 16,
-    paddingBottom: 32,
   },
 
   taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: '#ffffff',
-    borderRadius: 10,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: '#eeeeee',
   },
 
-  taskDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#e0b64b',
-    marginRight: 10,
+  taskRowCompleted: {
+    backgroundColor: '#fafafa',
   },
 
-  taskDotCompleted: {
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#d0a52f',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
+  },
+
+  checkboxCompleted: {
     backgroundColor: '#4caf6d',
+    borderColor: '#4caf6d',
+  },
+
+  checkmark: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
   },
 
   taskTextContainer: {
     flex: 1,
+    minWidth: 0,
   },
 
   taskName: {
@@ -695,12 +1181,12 @@ const styles = StyleSheet.create({
   },
 
   taskNameCompleted: {
-    color: '#558b2e',
+    color: '#777777',
     textDecorationLine: 'line-through',
   },
 
   taskStatus: {
-    marginLeft: 10,
+    marginTop: 4,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -710,19 +1196,92 @@ const styles = StyleSheet.create({
   },
 
   taskStatusCompleted: {
-    color: '#196509',
+    color: '#4caf6d',
   },
 
-  /* =========================
-     TASK MODAL
-     ========================= */
+  editButton: {
+    minHeight: 34,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 7,
+  },
 
-  modalOverlay: {
+  editButtonText: {
+    color: '#3346a3',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  deleteButton: {
+    minHeight: 34,
+    paddingHorizontal: 9,
+    borderRadius: 8,
+    backgroundColor: '#fff0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+
+  deleteButtonText: {
+    color: '#c62828',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  /* ========================================================
+     EMPTY
+     ======================================================== */
+
+  empty: {
+    alignItems: 'center',
+    paddingVertical: 45,
+    paddingHorizontal: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#eeeeee',
+  },
+
+  emptyTitle: {
+    fontSize: 19,
+    fontWeight: '600',
+    color: '#333333',
+  },
+
+  emptySubtitle: {
+    marginTop: 7,
+    fontSize: 14,
+    color: '#888888',
+    textAlign: 'center',
+  },
+
+  emptyAddButton: {
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 9,
+    backgroundColor: '#120ef8',
+  },
+
+  emptyAddButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  /* ========================================================
+     ADD / EDIT MODAL
+     ======================================================== */
+
+  editorOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
   },
 
-  modalBackdrop: {
+  editorBackdrop: {
     position: 'absolute',
     top: 0,
     right: 0,
@@ -731,16 +1290,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
 
-  taskModal: {
+  editorModal: {
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '75%',
-    minHeight: 250,
+    maxHeight: '85%',
+    minHeight: 330,
     paddingBottom: 20,
   },
 
-  modalHeader: {
+  editorHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -751,23 +1310,23 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eeeeee',
   },
 
-  modalHeaderText: {
+  editorHeaderText: {
     flex: 1,
   },
 
-  modalTitle: {
-    fontSize: 19,
+  editorTitle: {
+    fontSize: 20,
     fontWeight: '700',
     color: '#222222',
   },
 
-  modalSubtitle: {
+  editorSubtitle: {
     marginTop: 4,
     fontSize: 13,
     color: '#777777',
   },
 
-  closeButton: {
+  editorCloseButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -777,98 +1336,96 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
-  closeButtonText: {
+  editorCloseText: {
     fontSize: 28,
     lineHeight: 30,
     color: '#333333',
   },
 
-  modalTaskList: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+  editorContent: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
     paddingBottom: 30,
   },
 
-  modalTaskRow: {
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333333',
+    marginBottom: 8,
+    marginTop: 5,
+  },
+
+  taskInput: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: '#dddddd',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: '#222222',
+    backgroundColor: '#fafafa',
+  },
+
+  dateInput: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: '#dddddd',
+    borderRadius: 10,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    backgroundColor: '#fafafa',
   },
 
-  modalTaskIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-
-  modalTaskIconPending: {
-    backgroundColor: '#e0b64b',
-  },
-
-  modalTaskIconCompleted: {
-    backgroundColor: '#4caf6d',
-  },
-
-  modalCheck: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-
-  modalTaskContent: {
+  dateInputText: {
     flex: 1,
-  },
-
-  modalTaskName: {
     fontSize: 15,
-    fontWeight: '600',
     color: '#222222',
   },
 
-  modalTaskNameCompleted: {
-    color: '#777777',
-    textDecorationLine: 'line-through',
+  calendarEmoji: {
+    fontSize: 20,
+    marginLeft: 10,
   },
 
-  modalTaskStatus: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: '600',
+  editorButtons: {
+    flexDirection: 'row',
+    marginTop: 25,
   },
 
-  modalStatusPending: {
-    color: '#b8860b',
-  },
-
-  modalStatusCompleted: {
-    color: '#4caf6d',
-  },
-
-  /* Empty state */
-  empty: {
+  cancelButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#dddddd',
     alignItems: 'center',
-    paddingTop: 60,
+    justifyContent: 'center',
+    marginRight: 7,
   },
 
-  emptyTitle: {
-    fontSize: 19,
-    fontWeight: '600',
-    color: '#333333',
-  },
-
-  emptySubtitle: {
-    marginTop: 6,
+  cancelButtonText: {
     fontSize: 14,
-    color: '#888888',
-    textAlign: 'center',
-    paddingHorizontal: 30,
+    fontWeight: '700',
+    color: '#555555',
+  },
+
+  saveButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 10,
+    backgroundColor: '#120ef8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 7,
+  },
+
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });
 
