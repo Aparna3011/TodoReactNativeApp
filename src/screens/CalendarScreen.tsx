@@ -1,12 +1,12 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   FlatList,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
 import {useFocusEffect} from '@react-navigation/native';
 import {CalendarDays} from 'lucide-react-native';
 
@@ -63,7 +63,7 @@ function CalendarScreen(): React.JSX.Element {
   }, [todos]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaScreen style={styles.safeArea} edges={TAB_SCREEN_EDGES}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
@@ -133,7 +133,7 @@ function CalendarScreen(): React.JSX.Element {
           }
         />
       </View>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

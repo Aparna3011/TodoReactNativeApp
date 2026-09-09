@@ -1,13 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -18,6 +18,23 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 type Filter = 'all' | 'pending' | 'completed';
+
+// Ordinary UI spacing constants (NOT safe-area values). The actual device
+// insets are applied at runtime by SafeAreaScreen / the bottom tab bar.
+const FAB_HEIGHT = 58;
+const FAB_CLEARANCE = 16;
+const FAB_RIGHT_MARGIN = 20;
+const LIST_BOTTOM_GAP = 26;
+
+/**
+ * Vertical space reserved at the bottom of the scrollable list so the very
+ * last task card can be fully scrolled above the floating action button.
+ *
+ * Derived from the FAB geometry (which itself floats above the tab bar),
+ * instead of a magic number:
+ *   FAB height + FAB's clearance above the tab bar + an extra gap.
+ */
+const LIST_BOTTOM_PADDING = FAB_HEIGHT + FAB_CLEARANCE + LIST_BOTTOM_GAP;
 
 function HomeScreen(): React.JSX.Element {
   const navigation = useNavigation<NavigationProp>();
@@ -62,8 +79,14 @@ function HomeScreen(): React.JSX.Element {
     await loadTodos();
   };
 
+  // The tab screen's container ends exactly at the top edge of the tab bar.
+  // The FAB is positioned with FAB_CLEARANCE (16dp) above the top edge of
+  // the tab bar, remaining completely above both the tab bar and Android
+  // system navigation.
+  const fabBottom = FAB_CLEARANCE;
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaScreen style={styles.safeArea} edges={TAB_SCREEN_EDGES}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
@@ -104,7 +127,10 @@ function HomeScreen(): React.JSX.Element {
         <FlatList
           data={filteredTodos}
           keyExtractor={item => String(item.id)}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            {paddingBottom: LIST_BOTTOM_PADDING},
+          ]}
           renderItem={({ item }) => (
             <View style={styles.taskCard}>
               <TouchableOpacity
@@ -159,13 +185,13 @@ function HomeScreen(): React.JSX.Element {
         />
 
         <TouchableOpacity
-          style={styles.addButton}
+          style={[styles.addButton, {bottom: fabBottom}]}
           onPress={() => navigation.navigate('AddTask')}
         >
           <Text style={styles.addButtonText}>+</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 
@@ -270,7 +296,6 @@ const styles = StyleSheet.create({
 
   list: {
     padding: 16,
-    paddingBottom: 100,
   },
 
   taskCard: {
@@ -356,11 +381,10 @@ const styles = StyleSheet.create({
 
   addButton: {
     position: 'absolute',
-    right: 20,
-    bottom: 25,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    right: FAB_RIGHT_MARGIN,
+    width: FAB_HEIGHT,
+    height: FAB_HEIGHT,
+    borderRadius: FAB_HEIGHT / 2,
     backgroundColor: '#222222',
     alignItems: 'center',
     justifyContent: 'center',

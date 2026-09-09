@@ -1,11 +1,11 @@
 import React, {useCallback, useState} from 'react';
 import {
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
 import {useFocusEffect} from '@react-navigation/native';
 import {CircleCheck, Clock, ListTodo, UserRound} from 'lucide-react-native';
 
@@ -67,7 +67,7 @@ function ProfileScreen(): React.JSX.Element {
   ];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaScreen style={styles.safeArea} edges={TAB_SCREEN_EDGES}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
@@ -117,7 +117,7 @@ function ProfileScreen(): React.JSX.Element {
           </Text>
         </View>
       </View>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

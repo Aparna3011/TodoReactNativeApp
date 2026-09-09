@@ -1,11 +1,11 @@
 import React, {useCallback, useState} from 'react';
 import {
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   ChartNoAxesColumnIncreasing,
@@ -40,7 +40,7 @@ function StatsScreen(): React.JSX.Element {
   const completedTasks = todos.filter(todo => todo.completed === 1).length;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaScreen style={styles.safeArea} edges={TAB_SCREEN_EDGES}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
@@ -96,7 +96,7 @@ function StatsScreen(): React.JSX.Element {
           </Text>
         </View>
       </View>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

@@ -2,7 +2,6 @@ import React, {useState} from 'react';
 import {
   Alert,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import SafeAreaScreen, {FULL_SCREEN_EDGES} from '../components/SafeAreaScreen';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -108,7 +108,10 @@ function EditTaskScreen(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaScreen
+        style={styles.safeArea}
+        edges={FULL_SCREEN_EDGES}
+      >
       <StatusBar
         barStyle="dark-content"
       />
@@ -175,7 +178,7 @@ function EditTaskScreen(): React.JSX.Element {
           </TouchableOpacity>
         </View>
       </View>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 
