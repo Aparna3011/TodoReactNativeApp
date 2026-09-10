@@ -1,51 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   AppState,
   ScrollView,
   StatusBar,
   View,
 } from 'react-native';
 import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Calendar } from 'react-native-calendars';
 
-import {
-  addTodo,
-  deleteTodo,
-  getTodos,
-  toggleTodo,
-  updateTodo,
-} from '../database/todoRepository';
-
+import { getTodos } from '../database/todoRepository';
 import type { Todo } from '../types/todo';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 
 import CalendarHeader from '../components/calendar/CalendarHeader';
 import CalendarDay from '../components/calendar/CalendarDay';
-import SelectedDateTasks from '../components/calendar/SelectedDateTasks';
-import TaskEditorModal from '../components/calendar/TaskEditorModal';
 import { styles } from '../components/calendar/calendarStyles';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 /* =========================================================
    DATE HELPERS
    ========================================================= */
-function formatDateLabel(endDate: string): string {
-  const [year, month, day] = endDate.split('-').map(part => Number(part));
-
-  if (!year || !month || !day) {
-    return endDate;
-  }
-
-  const date = new Date(year, month - 1, day);
-
-  return date.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 function getTodayDateString(): string {
   const date = new Date();
 
@@ -56,51 +33,17 @@ function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * IMPORTANT:
- * Store the selected calendar date using local calendar values.
- *
- * Do NOT use:
- * date.toISOString().split('T')[0]
- *
- * because UTC conversion can move the date by one day.
- */
-function formatDateLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-function dateFromDateString(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-
-  return new Date(year, month - 1, day);
-}
-
 /* =========================================================
    CALENDAR SCREEN
    ========================================================= */
 function CalendarScreen(): React.JSX.Element {
+  const navigation = useNavigation<NavigationProp>();
+
   const [todos, setTodos] = useState<Todo[]>([]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
     getTodayDateString(),
   );
-
-  /* Add/Edit modal */
-  const [taskEditorVisible, setTaskEditorVisible] = useState(false);
-
-  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
-
-  const [taskName, setTaskName] = useState('');
-
-  const [endDate, setEndDate] = useState<Date>(
-    dateFromDateString(getTodayDateString()),
-  );
-
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   /*
    * Live "today" tracking.
@@ -221,14 +164,6 @@ function CalendarScreen(): React.JSX.Element {
   }, [todos]);
 
   /* =======================================================
-     SELECTED DATE TODOS
-     ======================================================= */
-
-  const selectedTodos = useMemo(() => {
-    return todosByDate[selectedDate] ?? [];
-  }, [todosByDate, selectedDate]);
-
-  /* =======================================================
      CALENDAR MARKED DATES
      ======================================================= */
 
@@ -255,145 +190,34 @@ function CalendarScreen(): React.JSX.Element {
   }, [todos, selectedDate]);
 
   /* =======================================================
-     SELECT DATE
+     SELECT DATE / NAVIGATION
      ======================================================= */
 
-  const handleSelectDate = useCallback((date: string) => {
-    setSelectedDate(date);
-  }, []);
-
-  /* =======================================================
-     OPEN ADD TASK
-     ======================================================= */
-
-  const openAddTask = useCallback(() => {
-    setEditingTodo(null);
-    setTaskName('');
-
-    /*
-     * New task starts with the currently selected
-     * calendar date.
-     */
-    setEndDate(dateFromDateString(selectedDate));
-
-    setShowDatePicker(false);
-    setTaskEditorVisible(true);
-  }, [selectedDate]);
-
-  /* =======================================================
-     OPEN EDIT TASK
-     ======================================================= */
-
-  const openEditTask = useCallback((todo: Todo) => {
-    setEditingTodo(todo);
-    setTaskName(todo.task_name);
-
-    /*
-     * Existing end_date is stored as YYYY-MM-DD.
-     */
-    setEndDate(dateFromDateString(todo.end_date));
-
-    setShowDatePicker(false);
-    setTaskEditorVisible(true);
-  }, []);
-
-  /* =======================================================
-     CLOSE ADD/EDIT MODAL
-     ======================================================= */
-
-  const closeTaskEditor = useCallback(() => {
-    setTaskEditorVisible(false);
-    setEditingTodo(null);
-    setTaskName('');
-    setEndDate(dateFromDateString(selectedDate));
-    setShowDatePicker(false);
-  }, [selectedDate]);
-
-  /* =======================================================
-     SAVE / UPDATE TASK
-     ======================================================= */
-
-  const saveTask = useCallback(async () => {
-    const name = taskName.trim();
-
-    if (!name) {
-      Alert.alert('Task required', 'Please enter a task name.');
-      return;
-    }
-
-    const date = formatDateLocal(endDate);
-
-    try {
-      if (editingTodo) {
-        await updateTodo(editingTodo.id, name, date);
-      } else {
-        await addTodo(name, date);
-      }
-
-      /*
-       * If the date was changed while editing,
-       * show the date containing the task.
-       */
+  const handleSelectDate = useCallback(
+    (date: string) => {
       setSelectedDate(date);
 
-      closeTaskEditor();
-
-      await loadTodos();
-    } catch (error) {
-      console.error('Failed to save task:', error);
-
-      Alert.alert('Error', 'Unable to save the task.');
-    }
-  }, [taskName, endDate, editingTodo, closeTaskEditor, loadTodos]);
-
-  /* =======================================================
-     COMPLETE / PENDING
-     ======================================================= */
-
-  const handleToggle = useCallback(
-    async (todo: Todo) => {
-      try {
-        await toggleTodo(todo.id, todo.completed);
-
-        await loadTodos();
-      } catch (error) {
-        console.error('Failed to update task status:', error);
-
-        Alert.alert('Error', 'Unable to update task status.');
+      const tasksForDate = todosByDate[date] ?? [];
+      if (tasksForDate.length === 0) {
+        navigation.navigate('AddTask', {
+          initialDate: date,
+        });
+      } else {
+        navigation.navigate('DateTasks', {
+          date,
+        });
       }
     },
-    [loadTodos],
+    [todosByDate, navigation],
   );
 
-  /* =======================================================
-     DELETE
-     ======================================================= */
-
-  const handleDelete = useCallback(
+  const handleTaskPress = useCallback(
     (todo: Todo) => {
-      Alert.alert('Delete Task', `Delete "${todo.task_name}"?`, [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteTodo(todo.id);
-
-              await loadTodos();
-            } catch (error) {
-              console.error('Failed to delete task:', error);
-
-              Alert.alert('Error', 'Unable to delete the task.');
-            }
-          },
-        },
-      ]);
+      navigation.navigate('EditTask', {
+        todo,
+      });
     },
-    [loadTodos],
+    [navigation],
   );
 
   /* =======================================================
@@ -426,11 +250,11 @@ function CalendarScreen(): React.JSX.Element {
           isSelected={date.dateString === selectedDate}
           isToday={date.dateString === getTodayDateString()}
           onSelectDate={handleSelectDate}
-          onTaskPress={openEditTask}
+          onTaskPress={handleTaskPress}
         />
       );
     },
-    [todosByDate, selectedDate, handleSelectDate, openEditTask],
+    [todosByDate, selectedDate, handleSelectDate, handleTaskPress],
   );
 
   /* =======================================================
@@ -448,10 +272,6 @@ function CalendarScreen(): React.JSX.Element {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* =================================================
-              HEADER
-              ================================================= */}
-
           <CalendarHeader />
 
           {/* =================================================
@@ -491,38 +311,7 @@ function CalendarScreen(): React.JSX.Element {
               style={styles.calendar}
             />
           </View>
-
-          {/* =================================================
-              SELECTED DATE HEADER + TASKS
-              ================================================= */}
-
-          <SelectedDateTasks
-            dateLabel={formatDateLabel(selectedDate)}
-            todos={selectedTodos}
-            onAddTask={openAddTask}
-            onToggle={handleToggle}
-            onEdit={openEditTask}
-            onDelete={handleDelete}
-          />
         </ScrollView>
-
-        {/* ===================================================
-            ADD / EDIT TASK MODAL
-            =================================================== */}
-
-        <TaskEditorModal
-          visible={taskEditorVisible}
-          editingTodo={editingTodo}
-          taskName={taskName}
-          onTaskNameChange={setTaskName}
-          endDate={endDate}
-          endDateLabel={formatDateLabel(formatDateLocal(endDate))}
-          onEndDateChange={setEndDate}
-          showDatePicker={showDatePicker}
-          onShowDatePickerChange={setShowDatePicker}
-          onRequestClose={closeTaskEditor}
-          onSave={saveTask}
-        />
       </View>
     </SafeAreaScreen>
   );

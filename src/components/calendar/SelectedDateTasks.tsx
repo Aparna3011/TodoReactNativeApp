@@ -107,7 +107,11 @@ function SelectedDateTasks({
 
                 {/* TASK CONTENT */}
 
-                <View style={styles.taskTextContainer}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => onEdit(todo)}
+                  style={styles.taskTextContainer}
+                >
                   <Text
                     numberOfLines={2}
                     style={[
@@ -128,7 +132,7 @@ function SelectedDateTasks({
                   >
                     {completed ? 'Completed' : 'Pending'}
                   </Text>
-                </View>
+                </TouchableOpacity>
 
                 {/* TASK IMAGE THUMBNAIL */}
 

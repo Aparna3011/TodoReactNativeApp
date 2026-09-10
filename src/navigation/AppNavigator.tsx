@@ -4,13 +4,21 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import BottomTabNavigator from './BottomTabNavigator';
 import AddTaskScreen from '../screens/AddTaskScreen';
 import EditTaskScreen from '../screens/EditTaskScreen';
+import DateTasksScreen from '../screens/DateTasksScreen';
 import type {Todo} from '../types/todo';
 
 export type RootStackParamList = {
   Home: undefined;
-  AddTask: undefined;
+  AddTask:
+    | {
+        initialDate?: string;
+      }
+    | undefined;
   EditTask: {
     todo: Todo;
+  };
+  DateTasks: {
+    date: string;
   };
 };
 
@@ -36,6 +44,11 @@ function AppNavigator(): React.JSX.Element {
       <Stack.Screen
         name="EditTask"
         component={EditTaskScreen}
+      />
+
+      <Stack.Screen
+        name="DateTasks"
+        component={DateTasksScreen}
       />
     </Stack.Navigator>
   );

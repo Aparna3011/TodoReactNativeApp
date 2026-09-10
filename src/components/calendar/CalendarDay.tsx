@@ -54,12 +54,14 @@ function CalendarDay({
   const remainingCount = todos.length - visibleTodos.length;
 
   return (
-    <View style={[styles.calendarDay, isSelected && styles.calendarDaySelected]}>
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={() => onSelectDate(date.dateString)}
+      style={[styles.calendarDay, isSelected && styles.calendarDaySelected]}
+    >
       {/* DATE NUMBER */}
 
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => onSelectDate(date.dateString)}
+      <View
         style={[
           styles.dayNumberContainer,
           isToday && styles.dayNumberContainerToday,
@@ -76,7 +78,7 @@ function CalendarDay({
         >
           {date.day}
         </Text>
-      </TouchableOpacity>
+      </View>
 
       {/* TASKS INSIDE CALENDAR CELL */}
 
@@ -105,7 +107,7 @@ function CalendarDay({
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

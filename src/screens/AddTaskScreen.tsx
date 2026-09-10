@@ -14,10 +14,43 @@ import SafeAreaScreen, {
   FULL_SCREEN_EDGES,
 } from '../components/SafeAreaScreen';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 
 import { addTodo } from '../database/todoRepository';
 import AndroidCamera from '../native/AndroidCamera';
+import type { RootStackParamList } from '../navigation/AppNavigator';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddTask'>;
+type AddRouteProp = RouteProp<RootStackParamList, 'AddTask'>;
+
+/**
+ * Parses a YYYY-MM-DD string into a Date using local calendar values.
+ * `new Date(string)` would interpret the string as UTC and can shift the
+ * selected day in off-UTC timezones, so it must be avoided here.
+ */
+function parseDateLocal(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+
+  // Reject dates that JavaScript would silently roll over (e.g. 2026-02-31).
+  if (
+    date.getFullYear() !== Number(year) ||
+    date.getMonth() !== Number(month) - 1 ||
+    date.getDate() !== Number(day)
+  ) {
+    return null;
+  }
+
+  return date;
+}
 
 /**
  * Formats a Date as a local calendar date string in YYYY-MM-DD format
@@ -32,10 +65,21 @@ function formatDateLocal(date: Date): string {
 }
 
 function AddTaskScreen(): React.JSX.Element {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<AddRouteProp>();
+
+  const initialDateString = route.params?.initialDate;
 
   const [taskName, setTaskName] = useState('');
-  const [endDate, setEndDate] = useState(new Date());
+  const [endDate, setEndDate] = useState<Date>(() => {
+    if (initialDateString) {
+      const parsed = parseDateLocal(initialDateString);
+      if (parsed) {
+        return parsed;
+      }
+    }
+    return new Date();
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
 
@@ -51,9 +95,10 @@ function AddTaskScreen(): React.JSX.Element {
     };
   }, []);
 
-  // Minimum selectable date = today's local calendar date (start of day, so today stays selectable..
-  const minimumDate = new Date();
-  minimumDate.setHours(0, 0, 0, 0);
+  // Minimum selectable date = start of today or selected date if earlier
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const minimumDate = endDate < today ? endDate : today;
 
   //camera function
   const handleCaptureImage = async () => {
