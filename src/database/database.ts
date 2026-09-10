@@ -1,5 +1,5 @@
-import {NativeModules} from 'react-native';
-import type {Todo} from '../types/todo';
+import { NativeModules } from 'react-native';
+import type { Todo } from '../types/todo';
 
 /**
  * Interface for the native AndroidSQLite module. On Android this opens
@@ -9,8 +9,18 @@ import type {Todo} from '../types/todo';
 interface NativeTodoDB {
   initialize(): Promise<void>;
   getTodos(): Promise<Todo[]>;
-  addTodo(taskName: string, endDate: string, createdAt: string): Promise<void>;
-  updateTodo(id: number, taskName: string, endDate: string): Promise<void>;
+  addTodo(
+    taskName: string,
+    endDate: string,
+    createdAt: string,
+    imagePath: string | null,
+  ): Promise<void>;
+  updateTodo(
+    id: number,
+    taskName: string,
+    endDate: string,
+    imagePath: string | null,
+  ): Promise<void>;
   setCompleted(id: number, completed: number): Promise<void>;
   deleteTodo(id: number): Promise<void>;
 }
@@ -31,12 +41,14 @@ export const db = {
     taskName: string,
     endDate: string,
     createdAt: string,
-  ): Promise<void> => nativeDb.addTodo(taskName, endDate, createdAt),
+    imagePath: string | null = null,
+  ): Promise<void> => nativeDb.addTodo(taskName, endDate, createdAt, imagePath),
   updateTodo: (
     id: number,
     taskName: string,
     endDate: string,
-  ): Promise<void> => nativeDb.updateTodo(id, taskName, endDate),
+    imagePath: string | null = null,
+  ): Promise<void> => nativeDb.updateTodo(id, taskName, endDate, imagePath),
   setCompleted: (id: number, completed: number): Promise<void> =>
     nativeDb.setCompleted(id, completed),
   deleteTodo: (id: number): Promise<void> => nativeDb.deleteTodo(id),

@@ -4,4 +4,5 @@ export type Todo = {
   end_date: string;
   completed: number;
   created_at: string;
+  image_path?: string | null;
 };
