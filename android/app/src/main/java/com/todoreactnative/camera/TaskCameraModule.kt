@@ -1,9 +1,12 @@
 package com.todoreactnative.camera
 
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Promise
@@ -22,14 +25,21 @@ class TaskCameraModule(
     companion object {
         private const val CAMERA_REQUEST_CODE = 1001
         private const val ERROR_CODE = "ANDROID_CAMERA_ERROR"
-        private const val FILE_PROVIDER_AUTHORITY =
-            "com.todoreactnative.fileprovider"
-        // Folder name visible to the user in phone storage
+        private const val FILE_PROVIDER_AUTHORITY = "com.todoreactnative.fileprovider"
         private const val APP_FOLDER_NAME = "TodoReactNative"
     }
 
+    // ── State between captureImage() and onActivityResult() ───────────────────
+
     private var cameraPromise: Promise? = null
-    private var currentImageFile: File? = null
+
+    /**
+     * The temporary file the camera writes to via FileProvider.
+     * Always set before launching the camera, regardless of API level.
+     */
+    private var currentTempFile: File? = null
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     init {
         reactContext.addActivityEventListener(this)
@@ -37,128 +47,160 @@ class TaskCameraModule(
 
     override fun getName(): String = "AndroidCamera"
 
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
     /**
-     * Resolves the directory where task images are stored.
-     * Primary:  external public storage → Pictures/TodoReactNative/
-     *           (visible to the user in their phone's Files / Gallery app)
-     * Fallback: app-private internal storage → files/task_images/
-     *           (used when external storage is not available)
+     * Returns the directory used for the temporary file the camera writes to.
+     *
+     * We always use the app-private internal files directory (filesDir/task_images/)
+     * because:
+     *  • It requires no storage permission on any Android version.
+     *  • It is already declared in file_paths.xml as
+     *      <files-path name="task_images" path="task_images/" />
+     *    so FileProvider can serve it as a content:// URI to the camera app.
+     *  • Camera apps reliably write to FileProvider content:// URIs.
      */
-    private fun resolveImageDirectory(): File {
+    private fun tempImageDirectory(): File {
+        val dir = File(reactApplicationContext.filesDir, "task_images")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    /**
+     * API 29+: copies the captured file into the user-visible
+     *   Pictures/TodoReactNative/
+     * using MediaStore (no WRITE_EXTERNAL_STORAGE permission required).
+     *
+     * Returns the public content:// URI on success, null on failure.
+     */
+    private fun copyToMediaStore(source: File): Uri? {
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, source.name)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                "${Environment.DIRECTORY_PICTURES}/$APP_FOLDER_NAME"
+            )
+        }
+
+        val publicUri = reactApplicationContext.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            values
+        ) ?: return null
+
+        return try {
+            reactApplicationContext.contentResolver
+                .openOutputStream(publicUri)
+                ?.use { out -> source.inputStream().use { it.copyTo(out) } }
+            publicUri
+        } catch (e: Exception) {
+            // Clean up the empty MediaStore entry on failure
+            try {
+                reactApplicationContext.contentResolver.delete(publicUri, null, null)
+            } catch (ignored: Exception) { /* best-effort */ }
+            null
+        }
+    }
+
+    /**
+     * API < 29: moves (or copies) the captured temp file into the user-visible
+     *   Pictures/TodoReactNative/
+     * using direct file access, which is permitted on Android 7–9.
+     *
+     * Returns the destination File, or null on failure.
+     */
+    private fun moveToPublicPictures(source: File): File? {
         val externalPictures = Environment.getExternalStoragePublicDirectory(
             Environment.DIRECTORY_PICTURES
-        )
+        ) ?: return null
 
-        if (externalPictures != null &&
-            (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED ||
-             Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED_READ_ONLY)
-        ) {
-            val appDir = File(externalPictures, APP_FOLDER_NAME)
-            if (!appDir.exists()) {
-                appDir.mkdirs()
-            }
-            if (appDir.exists()) {
-                return appDir
-            }
-        }
+        if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED) return null
 
-        // Fallback: private internal storage
-        val internalDir = File(reactApplicationContext.filesDir, "task_images")
-        if (!internalDir.exists()) {
-            internalDir.mkdirs()
+        val destDir = File(externalPictures, APP_FOLDER_NAME)
+        if (!destDir.exists()) destDir.mkdirs()
+        if (!destDir.exists()) return null
+
+        val dest = File(destDir, source.name)
+
+        // Try rename first (instant, same partition unlikely but try)
+        if (source.renameTo(dest)) return dest
+
+        // Fall back to copy + delete
+        return try {
+            source.copyTo(dest, overwrite = true)
+            source.delete()
+            dest
+        } catch (e: Exception) {
+            null
         }
-        return internalDir
     }
+
+    // ── @ReactMethod: captureImage ────────────────────────────────────────────
 
     @ReactMethod
     fun captureImage(promise: Promise) {
         val activity = reactApplicationContext.currentActivity
 
         if (activity == null) {
-            promise.reject(
-                ERROR_CODE,
-                "Unable to access the current Android activity."
-            )
+            promise.reject(ERROR_CODE, "Unable to access the current Android activity.")
             return
         }
 
         if (cameraPromise != null) {
-            promise.reject(
-                ERROR_CODE,
-                "A camera capture is already in progress."
-            )
+            promise.reject(ERROR_CODE, "A camera capture is already in progress.")
             return
         }
 
         try {
-            val imageDirectory = resolveImageDirectory()
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+            val fileName = "task_$timestamp.jpg"
 
-            val timestamp = SimpleDateFormat(
-                "yyyyMMdd_HHmmss_SSS",
-                Locale.US
-            ).format(Date())
+            // Create the temp file in app-private storage that FileProvider covers
+            val tempFile = File(tempImageDirectory(), fileName)
+            if (!tempFile.exists()) tempFile.createNewFile()
 
-            val imageFile = File(
-                imageDirectory,
-                "task_$timestamp.jpg"
-            )
-
-            // Physically create the output file before passing to the camera.
-            // Some camera apps require the file to already exist with EXTRA_OUTPUT.
-            if (!imageFile.exists()) {
-                imageFile.createNewFile()
-            }
-
+            // Get a FileProvider content:// URI — this is what camera apps
+            // reliably accept as EXTRA_OUTPUT on all Android versions.
             val imageUri: Uri = FileProvider.getUriForFile(
                 reactApplicationContext,
                 FILE_PROVIDER_AUTHORITY,
-                imageFile
+                tempFile
             )
 
-            val intent = Intent(
-                android.provider.MediaStore.ACTION_IMAGE_CAPTURE
-            )
-
-            intent.putExtra(
-                android.provider.MediaStore.EXTRA_OUTPUT,
-                imageUri
-            )
-
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri)
             intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            // Explicitly grant URI permission to every camera app that could handle the intent
+            // Explicitly grant URI write permission to every app that could
+            // handle the camera intent (required for FileProvider URIs).
             val resInfoList = activity.packageManager.queryIntentActivities(
                 intent,
                 android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
             )
             for (resolveInfo in resInfoList) {
-                val packageName = resolveInfo.activityInfo.packageName
                 activity.grantUriPermission(
-                    packageName,
+                    resolveInfo.activityInfo.packageName,
                     imageUri,
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
 
             cameraPromise = promise
-            currentImageFile = imageFile
+            currentTempFile = tempFile
 
-            activity.startActivityForResult(
-                intent,
-                CAMERA_REQUEST_CODE
-            )
+            activity.startActivityForResult(intent, CAMERA_REQUEST_CODE)
+
         } catch (e: Exception) {
+            currentTempFile?.let { if (it.exists()) it.delete() }
+            currentTempFile = null
             cameraPromise = null
-            currentImageFile = null
-
-            promise.reject(
-                ERROR_CODE,
-                e.message,
-                e
-            )
+            promise.reject(ERROR_CODE, e.message, e)
         }
     }
+
+    // ── @ReactMethod: deleteImageFile ─────────────────────────────────────────
 
     @ReactMethod
     fun deleteImageFile(path: String?, promise: Promise) {
@@ -168,17 +210,27 @@ class TaskCameraModule(
         }
 
         try {
-            val file = File(path)
-            if (file.exists()) {
-                val deleted = file.delete()
-                promise.resolve(deleted)
-            } else {
-                promise.resolve(false)
+            // API 29+: path is stored as a content:// URI string
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                path.startsWith("content://")
+            ) {
+                val uri = Uri.parse(path)
+                val rows = reactApplicationContext.contentResolver.delete(uri, null, null)
+                promise.resolve(rows > 0)
+                return
             }
+
+            // All other cases: delete as a File (absolute path)
+            val file = File(path)
+            if (file.exists()) promise.resolve(file.delete())
+            else promise.resolve(false)
+
         } catch (e: Exception) {
             promise.reject(ERROR_CODE, e.message, e)
         }
     }
+
+    // ── ActivityEventListener ─────────────────────────────────────────────────
 
     override fun onActivityResult(
         activity: Activity,
@@ -186,26 +238,23 @@ class TaskCameraModule(
         resultCode: Int,
         data: Intent?
     ) {
-        if (requestCode != CAMERA_REQUEST_CODE) {
+        if (requestCode != CAMERA_REQUEST_CODE) return
+
+        val promise  = cameraPromise  ?: return
+        val tempFile = currentTempFile
+
+        // Clear state immediately
+        cameraPromise   = null
+        currentTempFile = null
+
+        if (tempFile == null) {
+            promise.reject(ERROR_CODE, "Camera capture failed: no temp file reference.")
             return
         }
 
-        val promise = cameraPromise
-        val imageFile = currentImageFile
-
-        cameraPromise = null
-        currentImageFile = null
-
-        if (promise == null || imageFile == null) {
-            return
-        }
-
-        if (resultCode != Activity.RESULT_OK || !imageFile.exists() || imageFile.length() <= 0L) {
-            // Delete the empty placeholder file created before camera launch
-            if (imageFile.exists()) {
-                imageFile.delete()
-            }
-
+        // Cancel or capture failed
+        if (resultCode != Activity.RESULT_OK || !tempFile.exists() || tempFile.length() <= 0L) {
+            if (tempFile.exists()) tempFile.delete()
             promise.reject(
                 ERROR_CODE,
                 if (resultCode == Activity.RESULT_CANCELED)
@@ -216,12 +265,37 @@ class TaskCameraModule(
             return
         }
 
-        // Return the absolute path — stored as-is in SQLite (no file:// prefix)
-        promise.resolve(imageFile.absolutePath)
+        // ── Android 10+ ───────────────────────────────────────────────────────
+        // The camera has written the image to tempFile (filesDir/task_images/).
+        // Now copy it into the user-visible Pictures/TodoReactNative/ via
+        // MediaStore, then delete the temp file.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val publicUri = copyToMediaStore(tempFile)
+            if (publicUri != null) {
+                tempFile.delete() // safe to delete only after successful copy
+                // Return content:// URI — React Native Image handles this directly
+                promise.resolve(publicUri.toString())
+            } else {
+                // MediaStore copy failed (rare). Keep the temp file and return
+                // its absolute path so the image still displays in the app.
+                promise.resolve(tempFile.absolutePath)
+            }
+            return
+        }
+
+        // ── Android 7 – 9 ─────────────────────────────────────────────────────
+        // Move the temp file to the public Pictures/TodoReactNative/ directory.
+        val publicFile = moveToPublicPictures(tempFile)
+        if (publicFile != null) {
+            // Return absolute path — stored as-is in SQLite (no file:// prefix)
+            promise.resolve(publicFile.absolutePath)
+        } else {
+            // Move failed (external storage unavailable). Keep temp file.
+            promise.resolve(tempFile.absolutePath)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         // Not used.
     }
 }
-

@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
-  Image,
   StatusBar,
   StyleSheet,
   Text,
@@ -9,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
+import TaskImage from '../components/TaskImage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -166,17 +166,10 @@ function HomeScreen(): React.JSX.Element {
                 <Text style={styles.date}>End date: {item.end_date}</Text>
               </TouchableOpacity>
 
-              {item.image_path && (
-                <Image
-                  source={{
-                    uri: item.image_path.startsWith('file://')
-                      ? item.image_path
-                      : `file://${item.image_path}`,
-                  }}
-                  style={styles.taskThumbnail}
-                  resizeMode="cover"
-                />
-              )}
+              <TaskImage
+                imagePath={item.image_path}
+                style={styles.taskThumbnail}
+              />
 
               <TouchableOpacity
                 style={styles.deleteButton}

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Image,
   Platform,
   StatusBar,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import TaskImage from '../components/TaskImage';
 import SafeAreaScreen, {
   FULL_SCREEN_EDGES,
 } from '../components/SafeAreaScreen';
@@ -154,22 +154,22 @@ function AddTaskScreen(): React.JSX.Element {
           </Text>
         </TouchableOpacity>
 
-        {imagePath && (
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: imagePath.startsWith('file://') ? imagePath : `file://${imagePath}` }}
-              style={styles.imagePreview}
-              resizeMode="cover"
-            />
+        {/* Always show image area — placeholder before capture, real image after */}
+        <View style={styles.imageContainer}>
+          <TaskImage
+            imagePath={imagePath}
+            style={styles.imagePreview}
+          />
 
+          {imagePath && (
             <TouchableOpacity
               style={styles.removeImageButton}
               onPress={handleRemoveImage}
             >
               <Text style={styles.removeImageText}>Remove Image</Text>
             </TouchableOpacity>
-          </View>
-        )}
+          )}
+        </View>
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveText}>Save Task</Text>

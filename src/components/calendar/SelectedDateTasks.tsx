@@ -1,9 +1,10 @@
 import React from 'react';
-import { Image, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 
 import type { Todo } from '../../types/todo';
 
 import { styles } from './calendarStyles';
+import TaskImage from '../TaskImage';
 
 type SelectedDateTasksProps = {
   dateLabel: string;
@@ -131,17 +132,10 @@ function SelectedDateTasks({
 
                 {/* TASK IMAGE THUMBNAIL */}
 
-                {todo.image_path && (
-                  <Image
-                    source={{
-                      uri: todo.image_path.startsWith('file://')
-                        ? todo.image_path
-                        : `file://${todo.image_path}`,
-                    }}
-                    style={styles.taskThumbnail}
-                    resizeMode="cover"
-                  />
-                )}
+                <TaskImage
+                  imagePath={todo.image_path}
+                  style={styles.taskThumbnail}
+                />
 
                 {/* EDIT */}
 

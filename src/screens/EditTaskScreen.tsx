@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Image,
   Platform,
   StatusBar,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import SafeAreaScreen, { FULL_SCREEN_EDGES } from '../components/SafeAreaScreen';
+import TaskImage from '../components/TaskImage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -231,14 +231,9 @@ function EditTaskScreen(): React.JSX.Element {
 
           {imagePath && (
             <View style={styles.imageContainer}>
-              <Image
-                source={{
-                  uri: imagePath.startsWith('file://')
-                    ? imagePath
-                    : `file://${imagePath}`,
-                }}
+              <TaskImage
+                imagePath={imagePath}
                 style={styles.imagePreview}
-                resizeMode="cover"
               />
 
               <TouchableOpacity
