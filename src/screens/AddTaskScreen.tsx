@@ -134,10 +134,10 @@ function AddTaskScreen(): React.JSX.Element {
       return;
     }
 
-    if (!imagePath) {
-      Alert.alert('Required', 'Please capture an image.');
-      return;
-    }
+    // if (!imagePath) {
+    //   Alert.alert('Required', 'Please capture an image.');
+    //   return;
+    // }
 
     const formattedDate = formatDateLocal(endDate);
 
