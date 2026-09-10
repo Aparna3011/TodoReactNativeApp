@@ -2,6 +2,7 @@ import { NativeModules, Platform } from 'react-native';
 
 type AndroidCameraModule = {
   captureImage(): Promise<string>;
+  deleteImageFile(path: string): Promise<boolean>;
 };
 
 const { AndroidCamera } = NativeModules;

@@ -3,4 +3,7 @@
     <files-path
         name="task_images"
         path="task_images/" />
+    <external-path
+        name="todo_pictures"
+        path="Pictures/TodoReactNative/" />
 </paths>

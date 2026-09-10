@@ -1,6 +1,7 @@
-import React, {useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   Platform,
   StatusBar,
   StyleSheet,
@@ -9,14 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import SafeAreaScreen, {FULL_SCREEN_EDGES} from '../components/SafeAreaScreen';
+import SafeAreaScreen, { FULL_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {useNavigation, useRoute} from '@react-navigation/native';
-import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {RouteProp} from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 
-import {updateTodo} from '../database/todoRepository';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import { updateTodo } from '../database/todoRepository';
+import AndroidCamera from '../native/AndroidCamera';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type NavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -70,7 +72,7 @@ function EditTaskScreen(): React.JSX.Element {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<EditRouteProp>();
 
-  const {todo} = route.params;
+  const { todo } = route.params;
 
   const [taskName, setTaskName] = useState(todo.task_name);
 
@@ -82,6 +84,23 @@ function EditTaskScreen(): React.JSX.Element {
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  const [imagePath, setImagePath] = useState<string | null>(
+    todo.image_path ?? null,
+  );
+
+  const originalImagePathRef = useRef<string | null>(todo.image_path ?? null);
+  const newCapturedPathRef = useRef<string | null>(null);
+  const isSavedRef = useRef(false);
+
+  // Cleanup unsaved newly captured image if user cancels / exits without saving
+  useEffect(() => {
+    return () => {
+      if (!isSavedRef.current && newCapturedPathRef.current) {
+        AndroidCamera.deleteImageFile(newCapturedPathRef.current).catch(() => {});
+      }
+    };
+  }, []);
+
   // Start of today so today itself stays selectable.
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -89,6 +108,33 @@ function EditTaskScreen(): React.JSX.Element {
   // If the task is already overdue, let the picker keep its current date
   // instead of clamping it to today.
   const minimumDate = endDate < today ? endDate : today;
+
+  const handleCaptureImage = async () => {
+    try {
+      const capturedPath = await AndroidCamera.captureImage();
+
+      // Delete previously captured unsaved image in this edit session
+      if (
+        newCapturedPathRef.current &&
+        newCapturedPathRef.current !== capturedPath
+      ) {
+        AndroidCamera.deleteImageFile(newCapturedPathRef.current).catch(() => {});
+      }
+
+      newCapturedPathRef.current = capturedPath;
+      setImagePath(capturedPath);
+    } catch (error) {
+      console.log('Camera capture error:', error);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    if (newCapturedPathRef.current) {
+      AndroidCamera.deleteImageFile(newCapturedPathRef.current).catch(() => {});
+      newCapturedPathRef.current = null;
+    }
+    setImagePath(null);
+  };
 
   const handleSave = async () => {
     const task = taskName.trim();
@@ -99,9 +145,20 @@ function EditTaskScreen(): React.JSX.Element {
     }
 
     try {
-      await updateTodo(todo.id, task, formatDateLocal(endDate));
+      isSavedRef.current = true;
+      await updateTodo(todo.id, task, formatDateLocal(endDate), imagePath);
+
+      // If original image was replaced or removed, delete the old image file AFTER DB update succeeds
+      if (
+        originalImagePathRef.current &&
+        originalImagePathRef.current !== imagePath
+      ) {
+        AndroidCamera.deleteImageFile(originalImagePathRef.current).catch(() => {});
+      }
+
       navigation.goBack();
     } catch (error) {
+      isSavedRef.current = false;
       console.error('Failed to update task:', error);
       Alert.alert('Error', 'Unable to update the task.');
     }
@@ -109,9 +166,9 @@ function EditTaskScreen(): React.JSX.Element {
 
   return (
     <SafeAreaScreen
-        style={styles.safeArea}
-        edges={FULL_SCREEN_EDGES}
-      >
+      style={styles.safeArea}
+      edges={FULL_SCREEN_EDGES}
+    >
       <StatusBar
         barStyle="dark-content"
       />
@@ -159,6 +216,38 @@ function EditTaskScreen(): React.JSX.Element {
                 }
               }}
             />
+          )}
+
+          <Text style={styles.label}>Task image</Text>
+
+          <TouchableOpacity
+            style={styles.cameraButton}
+            onPress={handleCaptureImage}
+          >
+            <Text style={styles.cameraButtonText}>
+              {imagePath ? 'Replace / Retake Image' : 'Take Image'}
+            </Text>
+          </TouchableOpacity>
+
+          {imagePath && (
+            <View style={styles.imageContainer}>
+              <Image
+                source={{
+                  uri: imagePath.startsWith('file://')
+                    ? imagePath
+                    : `file://${imagePath}`,
+                }}
+                style={styles.imagePreview}
+                resizeMode="cover"
+              />
+
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={handleRemoveImage}
+              >
+                <Text style={styles.removeImageText}>Remove Image</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           <TouchableOpacity
@@ -243,6 +332,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     paddingHorizontal: 15,
+    marginBottom: 15,
   },
 
   dateText: {
@@ -250,9 +340,48 @@ const styles = StyleSheet.create({
     color: '#222222',
   },
 
+  cameraButton: {
+    height: 50,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dddddd',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 15,
+  },
+
+  cameraButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#222222',
+  },
+
+  imageContainer: {
+    marginBottom: 15,
+  },
+
+  imagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+
+  removeImageButton: {
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+
+  removeImageText: {
+    color: '#d32f2f',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
   saveButton: {
     height: 50,
-    marginTop: 25,
+    marginTop: 15,
     borderRadius: 10,
     backgroundColor: '#222222',
     alignItems: 'center',

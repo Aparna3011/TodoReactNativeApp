@@ -307,6 +307,13 @@ export const styles = StyleSheet.create({
     minWidth: 0,
   },
 
+  taskThumbnail: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+
   taskName: {
     fontSize: 15,
     fontWeight: '600',

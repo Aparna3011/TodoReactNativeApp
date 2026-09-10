@@ -34,8 +34,19 @@ export async function toggleTodo(
   await db.setCompleted(id, completed === 1 ? 0 : 1);
 }
 
+import AndroidCamera from '../native/AndroidCamera';
+
 export async function deleteTodo(
   id: number,
 ): Promise<void> {
+  const todos = await db.getTodos();
+  const target = todos.find(t => t.id === id);
   await db.deleteTodo(id);
+  if (target?.image_path) {
+    try {
+      await AndroidCamera.deleteImageFile(target.image_path);
+    } catch {
+      // Ignore cleanup error if file was already removed
+    }
+  }
 }

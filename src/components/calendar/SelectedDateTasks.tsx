@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Image, Text, TouchableOpacity, View } from 'react-native';
 
 import type { Todo } from '../../types/todo';
 
@@ -128,6 +128,20 @@ function SelectedDateTasks({
                     {completed ? 'Completed' : 'Pending'}
                   </Text>
                 </View>
+
+                {/* TASK IMAGE THUMBNAIL */}
+
+                {todo.image_path && (
+                  <Image
+                    source={{
+                      uri: todo.image_path.startsWith('file://')
+                        ? todo.image_path
+                        : `file://${todo.image_path}`,
+                    }}
+                    style={styles.taskThumbnail}
+                    resizeMode="cover"
+                  />
+                )}
 
                 {/* EDIT */}
 

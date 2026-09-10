@@ -3,6 +3,7 @@ package com.todoreactnative.camera
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import androidx.core.content.FileProvider
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Promise
@@ -23,6 +24,8 @@ class TaskCameraModule(
         private const val ERROR_CODE = "ANDROID_CAMERA_ERROR"
         private const val FILE_PROVIDER_AUTHORITY =
             "com.todoreactnative.fileprovider"
+        // Folder name visible to the user in phone storage
+        private const val APP_FOLDER_NAME = "TodoReactNative"
     }
 
     private var cameraPromise: Promise? = null
@@ -33,6 +36,39 @@ class TaskCameraModule(
     }
 
     override fun getName(): String = "AndroidCamera"
+
+    /**
+     * Resolves the directory where task images are stored.
+     * Primary:  external public storage → Pictures/TodoReactNative/
+     *           (visible to the user in their phone's Files / Gallery app)
+     * Fallback: app-private internal storage → files/task_images/
+     *           (used when external storage is not available)
+     */
+    private fun resolveImageDirectory(): File {
+        val externalPictures = Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_PICTURES
+        )
+
+        if (externalPictures != null &&
+            (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED ||
+             Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED_READ_ONLY)
+        ) {
+            val appDir = File(externalPictures, APP_FOLDER_NAME)
+            if (!appDir.exists()) {
+                appDir.mkdirs()
+            }
+            if (appDir.exists()) {
+                return appDir
+            }
+        }
+
+        // Fallback: private internal storage
+        val internalDir = File(reactApplicationContext.filesDir, "task_images")
+        if (!internalDir.exists()) {
+            internalDir.mkdirs()
+        }
+        return internalDir
+    }
 
     @ReactMethod
     fun captureImage(promise: Promise) {
@@ -55,14 +91,7 @@ class TaskCameraModule(
         }
 
         try {
-            val imageDirectory = File(
-                reactApplicationContext.filesDir,
-                "task_images"
-            )
-
-            if (!imageDirectory.exists()) {
-                imageDirectory.mkdirs()
-            }
+            val imageDirectory = resolveImageDirectory()
 
             val timestamp = SimpleDateFormat(
                 "yyyyMMdd_HHmmss_SSS",
@@ -73,6 +102,12 @@ class TaskCameraModule(
                 imageDirectory,
                 "task_$timestamp.jpg"
             )
+
+            // Physically create the output file before passing to the camera.
+            // Some camera apps require the file to already exist with EXTRA_OUTPUT.
+            if (!imageFile.exists()) {
+                imageFile.createNewFile()
+            }
 
             val imageUri: Uri = FileProvider.getUriForFile(
                 reactApplicationContext,
@@ -92,6 +127,20 @@ class TaskCameraModule(
             intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
+            // Explicitly grant URI permission to every camera app that could handle the intent
+            val resInfoList = activity.packageManager.queryIntentActivities(
+                intent,
+                android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+            )
+            for (resolveInfo in resInfoList) {
+                val packageName = resolveInfo.activityInfo.packageName
+                activity.grantUriPermission(
+                    packageName,
+                    imageUri,
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+
             cameraPromise = promise
             currentImageFile = imageFile
 
@@ -108,6 +157,26 @@ class TaskCameraModule(
                 e.message,
                 e
             )
+        }
+    }
+
+    @ReactMethod
+    fun deleteImageFile(path: String?, promise: Promise) {
+        if (path.isNullOrEmpty()) {
+            promise.resolve(false)
+            return
+        }
+
+        try {
+            val file = File(path)
+            if (file.exists()) {
+                val deleted = file.delete()
+                promise.resolve(deleted)
+            } else {
+                promise.resolve(false)
+            }
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
         }
     }
 
@@ -131,36 +200,23 @@ class TaskCameraModule(
             return
         }
 
-        if (resultCode == Activity.RESULT_CANCELED) {
-            imageFile.delete()
+        if (resultCode != Activity.RESULT_OK || !imageFile.exists() || imageFile.length() <= 0L) {
+            // Delete the empty placeholder file created before camera launch
+            if (imageFile.exists()) {
+                imageFile.delete()
+            }
 
             promise.reject(
                 ERROR_CODE,
-                "Camera capture was cancelled."
+                if (resultCode == Activity.RESULT_CANCELED)
+                    "Camera capture was cancelled."
+                else
+                    "Camera capture failed or produced no image."
             )
             return
         }
 
-        if (resultCode != Activity.RESULT_OK) {
-            imageFile.delete()
-
-            promise.reject(
-                ERROR_CODE,
-                "Camera capture failed."
-            )
-            return
-        }
-
-        if (!imageFile.exists() || imageFile.length() <= 0L) {
-            imageFile.delete()
-
-            promise.reject(
-                ERROR_CODE,
-                "Camera did not create a valid image file."
-            )
-            return
-        }
-
+        // Return the absolute path — stored as-is in SQLite (no file:// prefix)
         promise.resolve(imageFile.absolutePath)
     }
 
@@ -168,3 +224,4 @@ class TaskCameraModule(
         // Not used.
     }
 }
+

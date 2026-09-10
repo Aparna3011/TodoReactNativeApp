@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
+  Image,
   StatusBar,
   StyleSheet,
   Text,
@@ -164,6 +165,18 @@ function HomeScreen(): React.JSX.Element {
 
                 <Text style={styles.date}>End date: {item.end_date}</Text>
               </TouchableOpacity>
+
+              {item.image_path && (
+                <Image
+                  source={{
+                    uri: item.image_path.startsWith('file://')
+                      ? item.image_path
+                      : `file://${item.image_path}`,
+                  }}
+                  style={styles.taskThumbnail}
+                  resizeMode="cover"
+                />
+              )}
 
               <TouchableOpacity
                 style={styles.deleteButton}
@@ -377,6 +390,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 14,
     color: '#888888',
+  },
+
+  taskThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginHorizontal: 8,
   },
 
   addButton: {

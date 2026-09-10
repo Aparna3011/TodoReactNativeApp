@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -39,6 +39,18 @@ function AddTaskScreen(): React.JSX.Element {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
 
+  const unsavedCapturedPathRef = useRef<string | null>(null);
+  const isSavedRef = useRef(false);
+
+  // Clean up any unsaved captured image if user exits without saving
+  useEffect(() => {
+    return () => {
+      if (!isSavedRef.current && unsavedCapturedPathRef.current) {
+        AndroidCamera.deleteImageFile(unsavedCapturedPathRef.current).catch(() => {});
+      }
+    };
+  }, []);
+
   // Minimum selectable date = today's local calendar date (start of day, so today stays selectable..
   const minimumDate = new Date();
   minimumDate.setHours(0, 0, 0, 0);
@@ -47,10 +59,28 @@ function AddTaskScreen(): React.JSX.Element {
   const handleCaptureImage = async () => {
     try {
       const capturedPath = await AndroidCamera.captureImage();
+
+      // Delete previously captured unsaved image if retaking
+      if (
+        unsavedCapturedPathRef.current &&
+        unsavedCapturedPathRef.current !== capturedPath
+      ) {
+        AndroidCamera.deleteImageFile(unsavedCapturedPathRef.current).catch(() => {});
+      }
+
+      unsavedCapturedPathRef.current = capturedPath;
       setImagePath(capturedPath);
     } catch (error) {
       console.log('Camera capture error:', error);
     }
+  };
+
+  const handleRemoveImage = () => {
+    if (unsavedCapturedPathRef.current) {
+      AndroidCamera.deleteImageFile(unsavedCapturedPathRef.current).catch(() => {});
+      unsavedCapturedPathRef.current = null;
+    }
+    setImagePath(null);
   };
 
   const handleSave = async () => {
@@ -66,6 +96,7 @@ function AddTaskScreen(): React.JSX.Element {
 
     const formattedDate = formatDateLocal(endDate);
 
+    isSavedRef.current = true;
     await addTodo(taskName.trim(), formattedDate, imagePath);
 
     navigation.goBack();
@@ -124,11 +155,20 @@ function AddTaskScreen(): React.JSX.Element {
         </TouchableOpacity>
 
         {imagePath && (
-          <Image
-            source={{ uri: `file://${imagePath}` }}
-            style={styles.imagePreview}
-            resizeMode="cover"
-          />
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: imagePath.startsWith('file://') ? imagePath : `file://${imagePath}` }}
+              style={styles.imagePreview}
+              resizeMode="cover"
+            />
+
+            <TouchableOpacity
+              style={styles.removeImageButton}
+              onPress={handleRemoveImage}
+            >
+              <Text style={styles.removeImageText}>Remove Image</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
@@ -221,11 +261,26 @@ const styles = StyleSheet.create({
     color: '#222',
   },
 
+  imageContainer: {
+    marginBottom: 20,
+  },
+
   imagePreview: {
     width: '100%',
     height: 220,
     borderRadius: 10,
-    marginBottom: 25,
+    marginBottom: 10,
+  },
+
+  removeImageButton: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+
+  removeImageText: {
+    color: '#d32f2f',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
