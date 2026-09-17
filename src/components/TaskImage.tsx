@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle, ImageStyle } from 'react-native';
+import { Image as ImageIcon } from 'lucide-react-native';
 
 type TaskImageProps = {
   /** The stored path — content:// URI, absolute path, or null/undefined */
@@ -13,16 +14,6 @@ type TaskImageProps = {
   imageStyle?: StyleProp<ImageStyle>;
 };
 
-/**
- * Displays a task image from any storage path the app uses:
- *   • content://media/...  (MediaStore, Android 10+)
- *   • /absolute/path/...   (bare file path, Android 7–9)
- *   • file:///absolute/... (already-prefixed file path)
- *
- * Shows a neutral grey placeholder when:
- *   • imagePath is null / undefined / empty
- *   • the URI fails to load (onError)
- */
 function TaskImage({
   imagePath,
   style,
@@ -51,9 +42,9 @@ function TaskImage({
           onError={() => setLoadError(true)}
         />
       ) : (
-        /* Placeholder shown when there is no image or loading fails */
         <View style={styles.placeholder}>
-          <Text style={styles.placeholderIcon}>🖼️</Text>
+          <ImageIcon size={32} color="#9CA3AF" strokeWidth={1.8} />
+
           <Text style={styles.placeholderText}>No image</Text>
         </View>
       )}
@@ -67,21 +58,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#f0f0f0',
   },
+
   image: {
     width: '100%',
     height: '100%',
   },
+
   placeholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#eeeeee',
   },
-  placeholderIcon: {
-    fontSize: 22,
-    marginBottom: 4,
-  },
+
   placeholderText: {
+    marginTop: 6,
     fontSize: 11,
     color: '#999999',
     fontWeight: '500',
