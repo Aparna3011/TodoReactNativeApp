@@ -148,16 +148,23 @@ function CalendarScreen(): React.JSX.Element {
   const todosByDate = useMemo(() => {
     const grouped: Record<string, Todo[]> = {};
 
-    todos.forEach(todo => {
-      if (!todo.end_date) {
+    const addTodoToDate = (dateKey: string, todo: Todo) => {
+      if (!dateKey) {
         return;
       }
 
-      if (!grouped[todo.end_date]) {
-        grouped[todo.end_date] = [];
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = [];
       }
 
-      grouped[todo.end_date].push(todo);
+      grouped[dateKey].push(todo);
+    };
+
+    todos.forEach(todo => {
+      // A task appears on the calendar on the day it begins (start_date) and
+      // again on its deadline (end_date).
+      addTodoToDate(todo.start_date, todo);
+      addTodoToDate(todo.end_date, todo);
     });
 
     return grouped;
@@ -168,17 +175,23 @@ function CalendarScreen(): React.JSX.Element {
      ======================================================= */
 
   const markedDates = useMemo(() => {
-    const marked: Record<string, any> = {};
+    const marked: Record<string, {marked?: boolean; selected?: boolean}> = {};
 
-    todos.forEach(todo => {
-      if (!todo.end_date) {
+    const markDate = (dateKey: string) => {
+      if (!dateKey) {
         return;
       }
 
-      marked[todo.end_date] = {
-        ...(marked[todo.end_date] ?? {}),
+      marked[dateKey] = {
+        ...(marked[dateKey] ?? {}),
         marked: true,
       };
+    };
+
+    todos.forEach(todo => {
+      // Mark the day the task begins and the day it is due.
+      markDate(todo.start_date);
+      markDate(todo.end_date);
     });
 
     marked[selectedDate] = {

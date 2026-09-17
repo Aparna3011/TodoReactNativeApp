@@ -163,7 +163,9 @@ function HomeScreen(): React.JSX.Element {
                   {item.task_name}
                 </Text>
 
-                <Text style={styles.date}>End date: {item.end_date}</Text>
+                <Text style={styles.date}>
+                  Start: {item.start_date} · Due: {item.end_date}
+                </Text>
               </TouchableOpacity>
 
               <TaskImage

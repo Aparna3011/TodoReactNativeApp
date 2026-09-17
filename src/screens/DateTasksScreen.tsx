@@ -51,7 +51,9 @@ function DateTasksScreen(): React.JSX.Element {
   const loadDateTodos = useCallback(async () => {
     try {
       const allTodos = await getTodos();
-      const dateFiltered = allTodos.filter(t => t.end_date === date);
+      const dateFiltered = allTodos.filter(
+        t => t.end_date === date || t.start_date === date,
+      );
       setTodos(dateFiltered);
     } catch (error) {
       console.error('Failed to load todos for date:', error);
@@ -155,68 +157,78 @@ function DateTasksScreen(): React.JSX.Element {
                 completed && styles.taskCardCompleted,
               ]}
             >
-              {/* CHECKBOX */}
+              {/* TASK CONTENT ROW */}
+              <View style={styles.taskCardRow}>
+                {/* TASK CONTENT */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => handleEditTask(item)}
+                  style={styles.taskContent}
+                >
+                  <Text
+                    numberOfLines={2}
+                    style={[
+                      styles.taskName,
+                      completed && styles.taskNameCompleted,
+                    ]}
+                  >
+                    {item.task_name}
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.taskStatus,
+                      completed
+                        ? styles.taskStatusCompleted
+                        : styles.taskStatusPending,
+                    ]}
+                  >
+                    {completed ? 'Completed' : 'Pending'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* TASK IMAGE */}
+                <TaskImage
+                  imagePath={item.image_path}
+                  style={styles.taskThumbnail}
+                />
+
+                {/* EDIT BUTTON */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => handleEditTask(item)}
+                  style={styles.editButton}
+                >
+                  <Text style={styles.editButtonText}>Edit</Text>
+                </TouchableOpacity>
+
+                {/* DELETE BUTTON */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => handleDelete(item)}
+                  style={styles.deleteButton}
+                >
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* COMPLETION ACTION */}
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => handleToggle(item)}
                 style={[
-                  styles.checkbox,
-                  completed && styles.checkboxCompleted,
+                  styles.completeButton,
+                  completed && styles.completeButtonCompleted,
                 ]}
               >
-                {completed && <Text style={styles.checkmark}>✓</Text>}
-              </TouchableOpacity>
-
-              {/* TASK CONTENT */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => handleEditTask(item)}
-                style={styles.taskContent}
-              >
-                <Text
-                  numberOfLines={2}
-                  style={[
-                    styles.taskName,
-                    completed && styles.taskNameCompleted,
-                  ]}
-                >
-                  {item.task_name}
-                </Text>
-
                 <Text
                   style={[
-                    styles.taskStatus,
-                    completed
-                      ? styles.taskStatusCompleted
-                      : styles.taskStatusPending,
+                    styles.completeButtonText,
+                    completed && styles.completeButtonTextCompleted,
                   ]}
                 >
-                  {completed ? 'Completed' : 'Pending'}
+                  {completed ? 'Mark Uncomplete' : 'Mark Complete'}
                 </Text>
-              </TouchableOpacity>
-
-              {/* TASK IMAGE */}
-              <TaskImage
-                imagePath={item.image_path}
-                style={styles.taskThumbnail}
-              />
-
-              {/* EDIT BUTTON */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => handleEditTask(item)}
-                style={styles.editButton}
-              >
-                <Text style={styles.editButtonText}>Edit</Text>
-              </TouchableOpacity>
-
-              {/* DELETE BUTTON */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => handleDelete(item)}
-                style={styles.deleteButton}
-              >
-                <Text style={styles.deleteButtonText}>Delete</Text>
               </TouchableOpacity>
             </View>
           );
@@ -302,8 +314,7 @@ const styles = StyleSheet.create({
   },
 
   taskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 14,
@@ -322,26 +333,9 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
 
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#999999',
+  taskCardRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-
-  checkboxCompleted: {
-    backgroundColor: '#196509',
-    borderColor: '#196509',
-  },
-
-  checkmark: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
   },
 
   taskContent: {
@@ -404,6 +398,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#d32f2f',
+  },
+
+  completeButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#120ef8',
+  },
+
+  completeButtonCompleted: {
+    borderColor: '#196509',
+  },
+
+  completeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#120ef8',
+  },
+
+  completeButtonTextCompleted: {
+    color: '#196509',
   },
 
   emptyContainer: {

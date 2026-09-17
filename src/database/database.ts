@@ -11,6 +11,7 @@ interface NativeTodoDB {
   getTodos(): Promise<Todo[]>;
   addTodo(
     taskName: string,
+    startDate: string,
     endDate: string,
     createdAt: string,
     imagePath: string | null,
@@ -18,6 +19,7 @@ interface NativeTodoDB {
   updateTodo(
     id: number,
     taskName: string,
+    startDate: string,
     endDate: string,
     imagePath: string | null,
   ): Promise<void>;
@@ -39,16 +41,20 @@ export const db = {
   getTodos: (): Promise<Todo[]> => nativeDb.getTodos(),
   addTodo: (
     taskName: string,
+    startDate: string,
     endDate: string,
     createdAt: string,
     imagePath: string | null = null,
-  ): Promise<void> => nativeDb.addTodo(taskName, endDate, createdAt, imagePath),
+  ): Promise<void> =>
+    nativeDb.addTodo(taskName, startDate, endDate, createdAt, imagePath),
   updateTodo: (
     id: number,
     taskName: string,
+    startDate: string,
     endDate: string,
     imagePath: string | null = null,
-  ): Promise<void> => nativeDb.updateTodo(id, taskName, endDate, imagePath),
+  ): Promise<void> =>
+    nativeDb.updateTodo(id, taskName, startDate, endDate, imagePath),
   setCompleted: (id: number, completed: number): Promise<void> =>
     nativeDb.setCompleted(id, completed),
   deleteTodo: (id: number): Promise<void> => nativeDb.deleteTodo(id),

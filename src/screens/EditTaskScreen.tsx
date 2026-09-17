@@ -37,6 +37,7 @@ function EditTaskScreen(): React.JSX.Element {
 
         <TaskForm
           initialName={todo.task_name}
+          initialStartDate={todo.start_date}
           initialEndDate={todo.end_date}
           initialImagePath={todo.image_path ?? null}
           submitLabel="Save Changes"
@@ -45,9 +46,20 @@ function EditTaskScreen(): React.JSX.Element {
           emptyNameAlertTitle="Task required"
           showCancel
           onCancel={() => navigation.goBack()}
-          onSubmit={async ({ taskName, endDateString, imagePath }) => {
+          onSubmit={async ({
+            taskName,
+            startDateString,
+            endDateString,
+            imagePath,
+          }) => {
             try {
-              await updateTodo(todo.id, taskName, endDateString, imagePath);
+              await updateTodo(
+                todo.id,
+                taskName,
+                startDateString,
+                endDateString,
+                imagePath,
+              );
 
               // Delete the replaced/removed original AFTER the DB update succeeds.
               if (todo.image_path && todo.image_path !== imagePath) {

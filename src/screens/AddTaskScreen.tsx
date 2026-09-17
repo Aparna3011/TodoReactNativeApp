@@ -17,11 +17,39 @@ type AddRouteProp = RouteProp<RootStackParamList, 'AddTask'>;
  * capture/remove, validation, save button) come from the shared TaskForm; this
  * screen only passes the pre-selected date, the label, and the insert logic.
  */
+function getTodayDateString(): string {
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Add Task screen. All task form fields and behavior (name, start date,
+ * due date, image capture/remove, validation, save button) come from the
+ * shared TaskForm; this screen only passes the pre-selected date(s), the
+ * label, and the insert logic.
+ */
 function AddTaskScreen(): React.JSX.Element {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<AddRouteProp>();
 
   const initialDate = route.params?.initialDate;
+
+  /*
+   * When the calendar pre-selects a date, it is used as the due date. To keep
+   * the date range valid (start <= due) the start date defaults to the earlier
+   * of today / that date, so a task that started in the past can still be
+   * added from the calendar.
+   */
+  const initialStartDate = initialDate
+    ? initialDate < getTodayDateString()
+      ? initialDate
+      : getTodayDateString()
+    : undefined;
 
   return (
     <SafeAreaScreen style={styles.safeArea} edges={FULL_SCREEN_EDGES}>
@@ -33,10 +61,21 @@ function AddTaskScreen(): React.JSX.Element {
         </View>
 
         <TaskForm
+          initialStartDate={initialStartDate}
           initialEndDate={initialDate}
           submitLabel="Save Task"
-          onSubmit={async ({ taskName, endDateString, imagePath }) => {
-            await addTodo(taskName, endDateString, imagePath);
+          onSubmit={async ({
+            taskName,
+            startDateString,
+            endDateString,
+            imagePath,
+          }) => {
+            await addTodo(
+              taskName,
+              startDateString,
+              endDateString,
+              imagePath,
+            );
             navigation.goBack();
           }}
         />
