@@ -107,6 +107,36 @@ android {
     }
 }
 
+/**
+ * ============ RELEASE APK FILE NAME ============
+ *
+ * By default AGP names the package "<projectBaseName>-<buildType>.apk",
+ * i.e. "app-release.apk". The block below renames the RELEASE package to
+ * "Todo.apk".
+ *
+ * It uses AGP 9's public Variant API (`androidComponents` / `onVariants`) --
+ * the SAME modern API the React Native Gradle Plugin 0.87.1 uses internally
+ * (see ApplicationAndroidComponentsExtension + selector() + onVariants in
+ * `node_modules/@react-native/gradle-plugin`). The legacy
+ * `android.applicationVariants` API is deprecated in AGP 9.2.1 and removed in
+ * AGP 10, so it is intentionally NOT used.
+ *
+ * IMPORTANT: This block MUST stay at the TOP LEVEL of this build script,
+ * OUTSIDE the `dependencies {}` block. Inside `dependencies {}` Gradle
+ * resolves names against the DependencyHandler, which is exactly why the old
+ * `applicationVariants` code failed with:
+ *   "Could not get unknown property 'applicationVariants' ... DefaultDependencyHandler"
+ */
+// ADD HERE (top level, OUTSIDE dependencies {})
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.outputs.each { output ->
+            // Rename the release APK from "app-release.apk" to "Todo.apk"
+            output.outputFileName.set("Todo.apk")
+        }
+    }
+}
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
