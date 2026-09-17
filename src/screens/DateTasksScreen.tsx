@@ -21,6 +21,8 @@ import { deleteTodo, getTodos, toggleTodo } from '../database/todoRepository';
 import type { Todo } from '../types/todo';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
+import { getTodosScheduledOnDate } from '../utils/todoDate';
+
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'DateTasks'>;
 type DateTasksRouteProp = RouteProp<RootStackParamList, 'DateTasks'>;
 
@@ -51,10 +53,9 @@ function DateTasksScreen(): React.JSX.Element {
   const loadDateTodos = useCallback(async () => {
     try {
       const allTodos = await getTodos();
-      const dateFiltered = allTodos.filter(
-        t => t.end_date === date || t.start_date === date,
-      );
-      setTodos(dateFiltered);
+      // Same shared date rule as the calendar (see ../utils/todoDate), so this
+      // screen always shows the exact same set of tasks the calendar counted.
+      setTodos(getTodosScheduledOnDate(allTodos, date));
     } catch (error) {
       console.error('Failed to load todos for date:', error);
     }

@@ -240,6 +240,8 @@ return (
       onChangeText={setTaskName}
       placeholder="Enter task name"
       placeholderTextColor="#999999"
+      keyboardType="default"
+      returnKeyType="done"
     />
 
     {/* Start Date */}

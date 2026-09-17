@@ -1,5 +1,12 @@
 import React from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import SafeAreaScreen, { FULL_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import TaskForm from '../components/TaskForm';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -60,25 +67,54 @@ function AddTaskScreen(): React.JSX.Element {
           <Text style={styles.title}>Add Task</Text>
         </View>
 
-        <TaskForm
-          initialStartDate={initialStartDate}
-          initialEndDate={initialDate}
-          submitLabel="Save Task"
-          onSubmit={async ({
-            taskName,
-            startDateString,
-            endDateString,
-            imagePath,
-          }) => {
-            await addTodo(
-              taskName,
-              startDateString,
-              endDateString,
-              imagePath,
-            );
-            navigation.goBack();
-          }}
-        />
+        {/* 
+          Keyboard-safe, scrollable form area.
+
+          The Android activity already uses windowSoftInputMode="adjustResize"
+          (AndroidManifest.xml), so when the keyboard opens the window resizes
+          to the visible area above it. KeyboardAvoidingView (behavior="height")
+          makes sure this area is sized to exactly the visible space, and the
+          single vertical ScrollView allows the whole form to be scrolled while
+          the keyboard is open. The ScrollView's native keyboard handling keeps
+          the focused Task Name input visible above the keyboard.
+
+          Structure:
+            SafeAreaScreen
+              └── View.container
+                    ├── titleRow ("Add Task", fixed header)
+                    └── KeyboardAvoidingView (flex: 1)
+                          └── ScrollView (flex: 1)
+                                └── TaskForm (all fields + Save/Cancel)
+        */}
+        <KeyboardAvoidingView
+          behavior="height"
+          style={styles.formArea}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <TaskForm
+              initialStartDate={initialStartDate}
+              initialEndDate={initialDate}
+              submitLabel="Save Task"
+              onSubmit={async ({
+                taskName,
+                startDateString,
+                endDateString,
+                imagePath,
+              }) => {
+                await addTodo(
+                  taskName,
+                  startDateString,
+                  endDateString,
+                  imagePath,
+                );
+                navigation.goBack();
+              }}
+            />
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </SafeAreaScreen>
   );
@@ -105,6 +141,35 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#222222',
     marginBottom: 20,
+  },
+
+  /*
+   * KeyboardAvoidingView area: fills the space between the fixed header and
+   * the bottom edge. Uses flex (no fixed heights), so it adapts to any screen
+   * size; with behavior="height" it shrinks to the space above the keyboard
+   * while the keyboard is open and returns to full height when it closes.
+   */
+  formArea: {
+    flex: 1,
+  },
+
+  /*
+   * The single main vertical ScrollView for the form. flex: 1 fills the
+   * KeyboardAvoidingView area on every screen size.
+   */
+  scrollView: {
+    flex: 1,
+  },
+
+  /*
+   * flexGrow: 1 lets the content fill the scroll viewport naturally on large
+   * screens; paddingBottom gives a small keyboard-safe buffer (for 3-button
+   * nav bars / gesture hints) without adding blank space when the keyboard is
+   * closed. No fixed heights anywhere.
+   */
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
   },
 });
 

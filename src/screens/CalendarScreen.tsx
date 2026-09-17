@@ -14,6 +14,8 @@ import { getTodos } from '../database/todoRepository';
 import type { Todo } from '../types/todo';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
+import { groupTodosByDate } from '../utils/todoDate';
+
 import CalendarHeader from '../components/calendar/CalendarHeader';
 import CalendarDay from '../components/calendar/CalendarDay';
 import { styles } from '../components/calendar/calendarStyles';
@@ -145,30 +147,9 @@ function CalendarScreen(): React.JSX.Element {
      GROUP TODOS BY DATE
      ======================================================= */
 
-  const todosByDate = useMemo(() => {
-    const grouped: Record<string, Todo[]> = {};
-
-    const addTodoToDate = (dateKey: string, todo: Todo) => {
-      if (!dateKey) {
-        return;
-      }
-
-      if (!grouped[dateKey]) {
-        grouped[dateKey] = [];
-      }
-
-      grouped[dateKey].push(todo);
-    };
-
-    todos.forEach(todo => {
-      // A task appears on the calendar on the day it begins (start_date) and
-      // again on its deadline (end_date).
-      addTodoToDate(todo.start_date, todo);
-      addTodoToDate(todo.end_date, todo);
-    });
-
-    return grouped;
-  }, [todos]);
+  // Shared with DateTasksScreen: a todo belongs to a date when that date is
+  // its start date or its due date, each todo listed at most once per date.
+  const todosByDate = useMemo(() => groupTodosByDate(todos), [todos]);
 
   /* =======================================================
      CALENDAR MARKED DATES
@@ -177,21 +158,12 @@ function CalendarScreen(): React.JSX.Element {
   const markedDates = useMemo(() => {
     const marked: Record<string, {marked?: boolean; selected?: boolean}> = {};
 
-    const markDate = (dateKey: string) => {
-      if (!dateKey) {
-        return;
-      }
-
+    // Dots come from the same date keys that render task chips, so a dot can
+    // never mark a day the calendar would not show a task for.
+    Object.keys(todosByDate).forEach(dateKey => {
       marked[dateKey] = {
-        ...(marked[dateKey] ?? {}),
         marked: true,
       };
-    };
-
-    todos.forEach(todo => {
-      // Mark the day the task begins and the day it is due.
-      markDate(todo.start_date);
-      markDate(todo.end_date);
     });
 
     marked[selectedDate] = {
@@ -200,7 +172,7 @@ function CalendarScreen(): React.JSX.Element {
     };
 
     return marked;
-  }, [todos, selectedDate]);
+  }, [todosByDate, selectedDate]);
 
   /* =======================================================
      SELECT DATE / NAVIGATION
