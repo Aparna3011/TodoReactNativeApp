@@ -192,6 +192,7 @@ function DateTasksScreen(): React.JSX.Element {
                 <TaskImage
                   imagePath={item.image_path}
                   style={styles.taskThumbnail}
+                  placeholderIconSize={18}
                 />
 
                 {/* EDIT BUTTON */}

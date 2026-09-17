@@ -1,5 +1,6 @@
 import React, {useCallback, useState} from 'react';
 import {
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -71,51 +72,56 @@ function ProfileScreen(): React.JSX.Element {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.avatar}>
-            <UserRound size={42} color="#222222" />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <View style={styles.avatar}>
+              <UserRound size={42} color="#222222" />
+            </View>
+
+            <Text style={styles.title}>Profile</Text>
+            <Text style={styles.subtitle}>Your task overview</Text>
           </View>
 
-          <Text style={styles.title}>Profile</Text>
-          <Text style={styles.subtitle}>Your task overview</Text>
-        </View>
+          <Text style={styles.sectionTitle}>Task Management</Text>
 
-        <Text style={styles.sectionTitle}>Task Management</Text>
+          <View style={styles.card}>
+            {rows.map((row, index) => {
+              const RowIcon = row.Icon;
 
-        <View style={styles.card}>
-          {rows.map((row, index) => {
-            const RowIcon = row.Icon;
-
-            return (
-              <View
-                key={row.label}
-                style={[
-                  styles.row,
-                  index < rows.length - 1 && styles.rowBorder,
-                ]}
-              >
+              return (
                 <View
+                  key={row.label}
                   style={[
-                    styles.rowIcon,
-                    {backgroundColor: row.iconBackground},
+                    styles.row,
+                    index < rows.length - 1 && styles.rowBorder,
                   ]}
                 >
-                  <RowIcon size={22} color={row.iconColor} />
+                  <View
+                    style={[
+                      styles.rowIcon,
+                      {backgroundColor: row.iconBackground},
+                    ]}
+                  >
+                    <RowIcon size={22} color={row.iconColor} />
+                  </View>
+
+                  <Text style={styles.rowLabel}>{row.label}</Text>
+
+                  <Text style={styles.rowValue}>{row.value}</Text>
                 </View>
+              );
+            })}
+          </View>
 
-                <Text style={styles.rowLabel}>{row.label}</Text>
-
-                <Text style={styles.rowValue}>{row.value}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Statistics are derived from your existing tasks.
-          </Text>
-        </View>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Statistics are derived from your existing tasks.
+            </Text>
+          </View>
+        </ScrollView>
       </View>
     </SafeAreaScreen>
   );
@@ -130,6 +136,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f7f7f7',
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 30,
   },
 
   header: {
@@ -219,7 +234,7 @@ const styles = StyleSheet.create({
   },
 
   footer: {
-    marginTop: 'auto',
+    marginTop: 30,
     padding: 20,
   },
 

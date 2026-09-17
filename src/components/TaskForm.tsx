@@ -229,137 +229,122 @@ function TaskForm({
 
   const showImageArea = renderImageWhenEmpty || imagePath !== null;
 
-return (
-  <View style={styles.form}>
-    {/* Task Name */}
-    <Text style={styles.label}>Task name</Text>
+  return (
+    <View style={styles.form}>
+      {/* Task Name */}
+      <Text style={styles.label}>Task name</Text>
 
-    <TextInput
-      style={styles.input}
-      value={taskName}
-      onChangeText={setTaskName}
-      placeholder="Enter task name"
-      placeholderTextColor="#999999"
-      keyboardType="default"
-      returnKeyType="done"
-    />
-
-    {/* Start Date */}
-    <Text style={styles.label}>Start date</Text>
-
-    <TouchableOpacity
-      style={styles.dateButton}
-      onPress={() => setShowStartDatePicker(true)}
-    >
-      <Text style={styles.dateText}>
-        {startDate.toLocaleDateString()}
-      </Text>
-    </TouchableOpacity>
-
-    {showStartDatePicker && (
-      <DateTimePicker
-        value={startDate}
-        mode="date"
-        display={Platform.OS === 'android' ? 'calendar' : 'default'}
-        onChange={(event, selectedDate) => {
-          setShowStartDatePicker(false);
-
-          if (event.type === 'set' && selectedDate) {
-            handleStartDateChange(selectedDate);
-          }
-        }}
+      <TextInput
+        style={styles.input}
+        value={taskName}
+        onChangeText={setTaskName}
+        placeholder="Enter task name"
+        placeholderTextColor="#999999"
+        keyboardType="default"
+        returnKeyType="done"
       />
-    )}
 
-    {/* Due Date */}
-    <Text style={styles.label}>Due date</Text>
+      {/* Start Date */}
+      <Text style={styles.label}>Start date</Text>
 
-    <TouchableOpacity
-      style={styles.dateButton}
-      onPress={() => setShowEndDatePicker(true)}
-    >
-      <Text style={styles.dateText}>
-        {endDate.toLocaleDateString()}
-      </Text>
-    </TouchableOpacity>
-
-    {showEndDatePicker && (
-      <DateTimePicker
-        value={endDate}
-        mode="date"
-        display={Platform.OS === 'android' ? 'calendar' : 'default'}
-        minimumDate={startDateStart}
-        onChange={(event, selectedDate) => {
-          setShowEndDatePicker(false);
-
-          // Defensive guard: never allow a due date before the start date,
-          // even if the native minimumDate is bypassed.
-          if (
-            event.type === 'set' &&
-            selectedDate &&
-            !isDateBefore(selectedDate, startDate)
-          ) {
-            setEndDate(selectedDate);
-          }
-        }}
-      />
-    )}
-
-    {/* Task Image */}
-    <Text style={styles.label}>Task image</Text>
-
-    <TouchableOpacity
-      style={styles.cameraButton}
-      onPress={handleCaptureImage}
-    >
-      <Text style={styles.cameraButtonText}>
-        {imagePath ? retakeImageLabel : 'Take Image'}
-      </Text>
-    </TouchableOpacity>
-
-    {showImageArea && (
-      <View style={styles.imageContainer}>
-        <TaskImage
-          imagePath={imagePath}
-          style={styles.imagePreview}
-        />
-
-        {imagePath && (
-          <TouchableOpacity
-            style={styles.removeImageButton}
-            onPress={handleRemoveImage}
-          >
-            <Text style={styles.removeImageText}>
-              Remove Image
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    )}
-
-    {/* Save */}
-    <TouchableOpacity
-      style={styles.saveButton}
-      onPress={handleSubmit}
-    >
-      <Text style={styles.saveText}>
-        {submitLabel}
-      </Text>
-    </TouchableOpacity>
-
-    {/* Cancel */}
-    {showCancel && (
       <TouchableOpacity
-        style={styles.cancelButton}
-        onPress={onCancel}
+        style={styles.dateButton}
+        onPress={() => setShowStartDatePicker(true)}
       >
-        <Text style={styles.cancelButtonText}>
-          Cancel
+        <Text style={styles.dateText}>{startDate.toLocaleDateString()}</Text>
+      </TouchableOpacity>
+
+      {showStartDatePicker && (
+        <DateTimePicker
+          value={startDate}
+          mode="date"
+          display={Platform.OS === 'android' ? 'calendar' : 'default'}
+          onChange={(event, selectedDate) => {
+            setShowStartDatePicker(false);
+
+            if (event.type === 'set' && selectedDate) {
+              handleStartDateChange(selectedDate);
+            }
+          }}
+        />
+      )}
+
+      {/* Due Date */}
+      <Text style={styles.label}>Due date</Text>
+
+      <TouchableOpacity
+        style={styles.dateButton}
+        onPress={() => setShowEndDatePicker(true)}
+      >
+        <Text style={styles.dateText}>{endDate.toLocaleDateString()}</Text>
+      </TouchableOpacity>
+
+      {showEndDatePicker && (
+        <DateTimePicker
+          value={endDate}
+          mode="date"
+          display={Platform.OS === 'android' ? 'calendar' : 'default'}
+          minimumDate={startDateStart}
+          onChange={(event, selectedDate) => {
+            setShowEndDatePicker(false);
+
+            // Defensive guard: never allow a due date before the start date,
+            // even if the native minimumDate is bypassed.
+            if (
+              event.type === 'set' &&
+              selectedDate &&
+              !isDateBefore(selectedDate, startDate)
+            ) {
+              setEndDate(selectedDate);
+            }
+          }}
+        />
+      )}
+
+      {/* Task Image */}
+      <Text style={styles.label}>Task image</Text>
+
+      <TouchableOpacity
+        style={styles.cameraButton}
+        onPress={handleCaptureImage}
+      >
+        <Text style={styles.cameraButtonText}>
+          {imagePath ? retakeImageLabel : 'Take Image'}
         </Text>
       </TouchableOpacity>
-    )}
-  </View>
-);
+
+      {showImageArea && (
+        <View style={styles.imageContainer}>
+          <TaskImage
+            imagePath={imagePath}
+            style={styles.imagePreview}
+            autoAspectRatio
+          />
+
+          {imagePath && (
+            <TouchableOpacity
+              style={styles.removeImageButton}
+              onPress={handleRemoveImage}
+            >
+              <Text style={styles.removeImageText}>Remove Image</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Save */}
+      <TouchableOpacity style={styles.saveButton} onPress={handleSubmit}>
+        <Text style={styles.saveText}>{submitLabel}</Text>
+      </TouchableOpacity>
+
+      {/* Cancel */}
+      {showCancel && (
+        <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -421,6 +406,9 @@ const styles = StyleSheet.create({
 
   imageContainer: {
     marginBottom: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
 
   imagePreview: {

@@ -1,5 +1,6 @@
 import React, {useCallback, useState} from 'react';
 import {
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -55,46 +56,51 @@ function StatsScreen(): React.JSX.Element {
           </View>
         </View>
 
-        <View style={styles.cardsRow}>
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, styles.cardIconTotal]}>
-              <ListTodo size={22} color="#4a6edb" />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.cardsRow}>
+            <View style={styles.card}>
+              <View style={[styles.cardIcon, styles.cardIconTotal]}>
+                <ListTodo size={22} color="#4a6edb" />
+              </View>
+              <Text style={styles.cardValue}>{totalTasks}</Text>
+              <Text style={styles.cardLabel}>Total Tasks</Text>
             </View>
-            <Text style={styles.cardValue}>{totalTasks}</Text>
-            <Text style={styles.cardLabel}>Total Tasks</Text>
+
+            <View style={styles.card}>
+              <View style={[styles.cardIcon, styles.cardIconPending]}>
+                <Clock size={22} color="#d99a1b" />
+              </View>
+              <Text style={styles.cardValue}>{pendingTasks}</Text>
+              <Text style={styles.cardLabel}>Pending</Text>
+            </View>
+
+            <View style={styles.card}>
+              <View style={[styles.cardIcon, styles.cardIconCompleted]}>
+                <CircleCheck size={22} color="#2e9e4f" />
+              </View>
+              <Text style={styles.cardValue}>{completedTasks}</Text>
+              <Text style={styles.cardLabel}>Completed</Text>
+            </View>
           </View>
 
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, styles.cardIconPending]}>
-              <Clock size={22} color="#d99a1b" />
+          {totalTasks > 0 && (
+            <View style={styles.summary}>
+              <Text style={styles.summaryText}>
+                {Math.round((completedTasks / totalTasks) * 100)}% of your tasks
+                are completed.
+              </Text>
             </View>
-            <Text style={styles.cardValue}>{pendingTasks}</Text>
-            <Text style={styles.cardLabel}>Pending</Text>
-          </View>
+          )}
 
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, styles.cardIconCompleted]}>
-              <CircleCheck size={22} color="#2e9e4f" />
-            </View>
-            <Text style={styles.cardValue}>{completedTasks}</Text>
-            <Text style={styles.cardLabel}>Completed</Text>
-          </View>
-        </View>
-
-        {totalTasks > 0 && (
-          <View style={styles.summary}>
-            <Text style={styles.summaryText}>
-              {Math.round((completedTasks / totalTasks) * 100)}% of your tasks
-              are completed.
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Stats are derived from your existing tasks.
             </Text>
           </View>
-        )}
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Stats are derived from your existing tasks.
-          </Text>
-        </View>
+        </ScrollView>
       </View>
     </SafeAreaScreen>
   );
@@ -109,6 +115,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f7f7f7',
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 30,
   },
 
   header: {
@@ -213,7 +228,7 @@ const styles = StyleSheet.create({
   },
 
   footer: {
-    marginTop: 'auto',
+    marginTop: 30,
     padding: 20,
   },
 

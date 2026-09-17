@@ -139,6 +139,7 @@ function SelectedDateTasks({
                 <TaskImage
                   imagePath={todo.image_path}
                   style={styles.taskThumbnail}
+                  placeholderIconSize={18}
                 />
 
                 {/* EDIT */}

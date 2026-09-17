@@ -47,16 +47,11 @@ function AddTaskScreen(): React.JSX.Element {
   const initialDate = route.params?.initialDate;
 
   /*
-   * When the calendar pre-selects a date, it is used as the due date. To keep
-   * the date range valid (start <= due) the start date defaults to the earlier
-   * of today / that date, so a task that started in the past can still be
-   * added from the calendar.
+   * When the calendar pre-selects a date, both start and due date default to
+   * that date. This way the task is associated with exactly the calendar date
+   * the user tapped. The user can still adjust either date in the form.
    */
-  const initialStartDate = initialDate
-    ? initialDate < getTodayDateString()
-      ? initialDate
-      : getTodayDateString()
-    : undefined;
+  const initialStartDate = initialDate ?? undefined;
 
   return (
     <SafeAreaScreen style={styles.safeArea} edges={FULL_SCREEN_EDGES}>

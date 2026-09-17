@@ -86,106 +86,128 @@ function HomeScreen(): React.JSX.Element {
   // system navigation.
   const fabBottom = FAB_CLEARANCE;
 
+  /*
+   * Header + filters scroll with the list so the full screen height is
+   * available for task cards on small devices. The header is placed inside
+   * the FlatList via ListHeaderComponent instead of being fixed above it.
+   */
+  const listHeader = (
+    <>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>My Tasks</Text>
+          <Text style={styles.subtitle}>Keep track of your daily tasks</Text>
+        </View>
+        <View style={styles.countCircle}>
+          <Text style={styles.countText}>
+            {filter === 'all'
+              ? todos.length
+              : filter === 'pending'
+              ? todos.filter(todo => todo.completed === 0).length
+              : todos.filter(todo => todo.completed === 1).length}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.filters}>
+        <FilterButton
+          label="All"
+          active={filter === 'all'}
+          activeColor="#0f49d2"
+          onPress={() => setFilter('all')}
+        />
+
+        <FilterButton
+          label="Pending"
+          active={filter === 'pending'}
+          activeColor="#d20f0f"
+          onPress={() => setFilter('pending')}
+        />
+
+        <FilterButton
+          label="Completed"
+          active={filter === 'completed'}
+          activeColor="#196509"
+          onPress={() => setFilter('completed')}
+        />
+      </View>
+    </>
+  );
+
   return (
     <SafeAreaScreen style={styles.safeArea} edges={TAB_SCREEN_EDGES}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>My Tasks</Text>
-            <Text style={styles.subtitle}>Keep track of your daily tasks</Text>
-          </View>
-          <View style={styles.countCircle}>
-            <Text style={styles.countText}>
-              {filter === 'all'
-                ? todos.length
-                : filter === 'pending'
-                ? todos.filter(todo => todo.completed === 0).length
-                : todos.filter(todo => todo.completed === 1).length}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.filters}>
-          <FilterButton
-            label="All"
-            active={filter === 'all'}
-            activeColor="#0f49d2"
-            onPress={() => setFilter('all')}
-          />
-
-          <FilterButton
-            label="Pending"
-            active={filter === 'pending'}
-            activeColor="#d20f0f"
-            onPress={() => setFilter('pending')}
-          />
-
-          <FilterButton
-            label="Completed"
-            active={filter === 'completed'}
-            activeColor="#196509"
-            onPress={() => setFilter('completed')}
-          />
-        </View>
-
         <FlatList
           data={filteredTodos}
           keyExtractor={item => String(item.id)}
+          ListHeaderComponent={listHeader}
           contentContainerStyle={[
-            styles.list,
+            styles.listContent,
             { paddingBottom: LIST_BOTTOM_PADDING },
           ]}
-          renderItem={({ item }) => (
-            <View style={styles.taskCard}>
-              <TouchableOpacity
-                style={[
-                  styles.checkbox,
-                  item.completed === 1 && styles.checkboxCompleted,
-                ]}
-                onPress={() => handleToggle(item)}
-              >
-                {item.completed === 1 && (
-                  <Text style={styles.checkmark}>✓</Text>
-                )}
-              </TouchableOpacity>
+          renderItem={({ item }) => {
+            const completed = item.completed === 1;
 
-              <TouchableOpacity
-                style={styles.taskContent}
-                onPress={() =>
-                  navigation.navigate('EditTask', {
-                    todo: item,
-                  })
-                }
-              >
-                <Text
-                  style={[
-                    styles.taskTitle,
-                    item.completed === 1 && styles.completedTask,
-                  ]}
-                >
-                  {item.task_name}
-                </Text>
+            return (
+              <View style={styles.taskCard}>
+                {/* TOP ROW: checkbox + task name + image thumbnail */}
+                <View style={styles.taskCardTopRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.checkbox,
+                      completed && styles.checkboxCompleted,
+                    ]}
+                    onPress={() => handleToggle(item)}
+                  >
+                    {completed && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </TouchableOpacity>
 
-                <Text style={styles.date}>
-                  Start: {item.start_date} · Due: {item.end_date}
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.taskContent}
+                    onPress={() =>
+                      navigation.navigate('EditTask', {
+                        todo: item,
+                      })
+                    }
+                  >
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.taskTitle,
+                        completed && styles.completedTask,
+                      ]}
+                    >
+                      {item.task_name}
+                    </Text>
+                  </TouchableOpacity>
 
-              <TaskImage
-                imagePath={item.image_path}
-                style={styles.taskThumbnail}
-              />
+                  <TaskImage
+                    imagePath={item.image_path}
+                    style={styles.taskThumbnail}
+                    placeholderIconSize={18}
+                  />
+                </View>
 
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDelete(item.id)}
-              >
-                <Text style={styles.deleteText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                {/* BOTTOM ROW: dates + delete */}
+                <View style={styles.taskCardBottomRow}>
+                  <Text style={styles.date} numberOfLines={1}>
+                    Start: {item.start_date}  ·  Due: {item.end_date}
+                  </Text>
+
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDelete(item.id)}
+                  >
+                    <Text style={styles.deleteText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No tasks found</Text>
@@ -251,6 +273,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
+  headerLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+
   title: {
     fontSize: 28,
     fontWeight: '700',
@@ -293,10 +320,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
-  filterButtonActive: {
-    backgroundColor: '#222222',
-  },
-
   filterText: {
     fontSize: 14,
     color: '#666666',
@@ -307,19 +330,31 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
 
-  list: {
-    padding: 16,
+  listContent: {
+    flexGrow: 1,
   },
 
   taskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
+    marginHorizontal: 16,
     borderWidth: 1,
     borderColor: '#eeeeee',
+  },
+
+  taskCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  taskCardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingLeft: 36,
   },
 
   checkbox: {
@@ -345,6 +380,7 @@ const styles = StyleSheet.create({
 
   taskContent: {
     flex: 1,
+    marginRight: 10,
   },
 
   taskTitle: {
@@ -359,14 +395,15 @@ const styles = StyleSheet.create({
   },
 
   date: {
-    marginTop: 5,
+    flex: 1,
     fontSize: 13,
     color: '#777777',
+    marginRight: 8,
   },
 
   deleteButton: {
-    marginLeft: 10,
-    padding: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
 
   deleteText: {
@@ -396,7 +433,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 8,
-    marginHorizontal: 8,
   },
 
   addButton: {

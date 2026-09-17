@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle, ImageStyle } from 'react-native';
 import { Image as ImageIcon } from 'lucide-react-native';
@@ -12,6 +12,10 @@ type TaskImageProps = {
   resizeMode?: 'cover' | 'contain' | 'stretch' | 'center';
   /** Optional override for the inner Image style */
   imageStyle?: StyleProp<ImageStyle>;
+  /** Size of the placeholder icon (auto-scales for small containers) */
+  placeholderIconSize?: number;
+  /** When true, dynamically adjusts container aspect ratio to match the natural image size */
+  autoAspectRatio?: boolean;
 };
 
 function TaskImage({
@@ -19,8 +23,11 @@ function TaskImage({
   style,
   resizeMode = 'cover',
   imageStyle,
+  placeholderIconSize,
+  autoAspectRatio = false,
 }: TaskImageProps): React.JSX.Element {
   const [loadError, setLoadError] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
   const hasImage = !!imagePath && !loadError;
 
@@ -32,20 +39,53 @@ function TaskImage({
     return `file://${path}`;
   };
 
+  useEffect(() => {
+    if (!imagePath) {
+      setAspectRatio(null);
+      setLoadError(false);
+      return;
+    }
+
+    setLoadError(false);
+    const uri = resolveUri(imagePath);
+
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (width > 0 && height > 0) {
+          setAspectRatio(width / height);
+        }
+      },
+      () => {
+        // Fallback: keep default aspectRatio if getSize fails
+      },
+    );
+  }, [imagePath]);
+
+  // Use a smaller icon for thumbnail-sized containers
+  const iconSize = placeholderIconSize ?? 32;
+
+  const dynamicAspectRatioStyle =
+    autoAspectRatio && aspectRatio && hasImage
+      ? { aspectRatio, height: undefined, minHeight: undefined }
+      : null;
+
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, style, dynamicAspectRatioStyle]}>
       {hasImage ? (
         <Image
           source={{ uri: resolveUri(imagePath!) }}
-          style={[styles.image, imageStyle]}
+          style={[styles.image, dynamicAspectRatioStyle, imageStyle]}
           resizeMode={resizeMode}
           onError={() => setLoadError(true)}
         />
       ) : (
         <View style={styles.placeholder}>
-          <ImageIcon size={32} color="#9CA3AF" strokeWidth={1.8} />
+          <ImageIcon size={iconSize} color="#9CA3AF" strokeWidth={1.8} />
 
-          <Text style={styles.placeholderText}>No image</Text>
+          {iconSize >= 24 && (
+            <Text style={styles.placeholderText}>No image</Text>
+          )}
         </View>
       )}
     </View>
@@ -80,3 +120,4 @@ const styles = StyleSheet.create({
 });
 
 export default TaskImage;
+
