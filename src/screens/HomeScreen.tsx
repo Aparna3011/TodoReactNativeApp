@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
+import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import TaskImage from '../components/TaskImage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -96,9 +96,14 @@ function HomeScreen(): React.JSX.Element {
             <Text style={styles.title}>My Tasks</Text>
             <Text style={styles.subtitle}>Keep track of your daily tasks</Text>
           </View>
-
           <View style={styles.countCircle}>
-            <Text style={styles.countText}>{todos.length}</Text>
+            <Text style={styles.countText}>
+              {filter === 'all'
+                ? todos.length
+                : filter === 'pending'
+                ? todos.filter(todo => todo.completed === 0).length
+                : todos.filter(todo => todo.completed === 1).length}
+            </Text>
           </View>
         </View>
 
@@ -130,7 +135,7 @@ function HomeScreen(): React.JSX.Element {
           keyExtractor={item => String(item.id)}
           contentContainerStyle={[
             styles.list,
-            {paddingBottom: LIST_BOTTOM_PADDING},
+            { paddingBottom: LIST_BOTTOM_PADDING },
           ]}
           renderItem={({ item }) => (
             <View style={styles.taskCard}>
@@ -193,7 +198,7 @@ function HomeScreen(): React.JSX.Element {
         />
 
         <TouchableOpacity
-          style={[styles.addButton, {bottom: fabBottom}]}
+          style={[styles.addButton, { bottom: fabBottom }]}
           onPress={() => navigation.navigate('AddTask')}
         >
           <Text style={styles.addButtonText}>+</Text>
