@@ -16,6 +16,13 @@ jest.mock('../src/database/database', () => ({
     updateTodo: jest.fn(async () => {}),
     setCompleted: jest.fn(async () => {}),
     deleteTodo: jest.fn(async () => {}),
+    checkAndTriggerStartupDueNotifications: jest.fn(async () => 0),
+    getNotifications: jest.fn(async () => []),
+    getUnreadNotificationCount: jest.fn(async () => 0),
+    markNotificationAsRead: jest.fn(async () => {}),
+    markAllNotificationsAsRead: jest.fn(async () => {}),
+    clearNotifications: jest.fn(async () => {}),
+    deleteNotification: jest.fn(async () => {}),
   },
 }));
 

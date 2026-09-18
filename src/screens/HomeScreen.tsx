@@ -12,8 +12,11 @@ import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import TaskImage from '../components/TaskImage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Bell } from 'lucide-react-native';
 
 import { getTodos, toggleTodo, deleteTodo } from '../database/todoRepository';
+import { getUnreadCount } from '../database/notificationRepository';
+import { getLocalTodayDateString, getTodoStatus } from '../utils/todoDate';
 import type { Todo } from '../types/todo';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
@@ -43,20 +46,25 @@ function HomeScreen(): React.JSX.Element {
 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  const loadTodos = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      const data = await getTodos();
-      setTodos(data);
+      const [todosData, unread] = await Promise.all([
+        getTodos(),
+        getUnreadCount(),
+      ]);
+      setTodos(todosData);
+      setUnreadCount(unread);
     } catch (error) {
-      console.error('Failed to load todos:', error);
+      console.error('Failed to load home data:', error);
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadTodos();
-    }, [loadTodos]),
+      loadData();
+    }, [loadData]),
   );
 
   const filteredTodos = todos.filter(todo => {
@@ -74,7 +82,7 @@ function HomeScreen(): React.JSX.Element {
   const handleToggle = async (todo: Todo) => {
     try {
       await toggleTodo(todo.id, todo.completed);
-      await loadTodos();
+      await loadData();
     } catch (error) {
       console.error('Failed to update task:', error);
       Alert.alert('Error', 'Unable to update the task.');
@@ -84,7 +92,7 @@ function HomeScreen(): React.JSX.Element {
   const handleDelete = async (id: number) => {
     try {
       await deleteTodo(id);
-      await loadTodos();
+      await loadData();
     } catch (error) {
       console.error('Failed to delete task:', error);
       Alert.alert('Error', 'Unable to delete the task.');
@@ -109,14 +117,34 @@ function HomeScreen(): React.JSX.Element {
           <Text style={styles.title}>My Tasks</Text>
           <Text style={styles.subtitle}>Keep track of your daily tasks</Text>
         </View>
-        <View style={styles.countCircle}>
-          <Text style={styles.countText}>
-            {filter === 'all'
-              ? todos.length
-              : filter === 'pending'
-              ? todos.filter(todo => todo.completed === 0).length
-              : todos.filter(todo => todo.completed === 1).length}
-          </Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.bellButton}
+            onPress={() => navigation.navigate('Notifications')}
+            accessibilityRole="button"
+            accessibilityLabel={`View Notifications${
+              unreadCount > 0 ? `, ${unreadCount} unread` : ''
+            }`}
+          >
+            <Bell size={20} color="#333333" />
+            {unreadCount > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.countCircle}>
+            <Text style={styles.countText}>
+              {filter === 'all'
+                ? todos.length
+                : filter === 'pending'
+                ? todos.filter(todo => todo.completed === 0).length
+                : todos.filter(todo => todo.completed === 1).length}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -145,6 +173,8 @@ function HomeScreen(): React.JSX.Element {
     </>
   );
 
+  const localToday = getLocalTodayDateString();
+
   return (
     <SafeAreaScreen style={styles.safeArea} edges={TAB_SCREEN_EDGES}>
       <StatusBar barStyle="dark-content" />
@@ -160,6 +190,7 @@ function HomeScreen(): React.JSX.Element {
           ]}
           renderItem={({ item }) => {
             const completed = item.completed === 1;
+            const status = getTodoStatus(item, localToday);
 
             return (
               <View style={styles.taskCard}>
@@ -201,11 +232,41 @@ function HomeScreen(): React.JSX.Element {
                   />
                 </View>
 
-                {/* BOTTOM ROW: dates + delete */}
+                {/* BOTTOM ROW: dates + status badge + delete */}
                 <View style={styles.taskCardBottomRow}>
-                  <Text style={styles.date} numberOfLines={1}>
-                    Start: {item.start_date} · Due: {item.end_date}
-                  </Text>
+                  <View style={styles.taskCardBottomLeft}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        status === 'COMPLETED'
+                          ? styles.statusBadgeCompleted
+                          : status === 'OVERDUE'
+                          ? styles.statusBadgeOverdue
+                          : status === 'DUE TODAY'
+                          ? styles.statusBadgeDueToday
+                          : styles.statusBadgeUpcoming,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusText,
+                          status === 'COMPLETED'
+                            ? styles.statusTextCompleted
+                            : status === 'OVERDUE'
+                            ? styles.statusTextOverdue
+                            : status === 'DUE TODAY'
+                            ? styles.statusTextDueToday
+                            : styles.statusTextUpcoming,
+                        ]}
+                      >
+                        {status}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.date} numberOfLines={1}>
+                      Start: {item.start_date} · Due: {item.end_date}
+                    </Text>
+                  </View>
 
                   <TouchableOpacity
                     style={styles.deleteButton}
@@ -297,6 +358,44 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 14,
     color: '#777777',
+  },
+
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  bellButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+
+  badgeContainer: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#ef4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+  },
+
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
   },
 
   countCircle: {
@@ -403,11 +502,63 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
   },
 
-  date: {
+  taskCardBottomLeft: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginRight: 8,
+  },
+
+  statusBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+
+  statusBadgeCompleted: {
+    backgroundColor: '#e8f5e9',
+  },
+
+  statusBadgeOverdue: {
+    backgroundColor: '#fef2f2',
+  },
+
+  statusBadgeDueToday: {
+    backgroundColor: '#eff6ff',
+  },
+
+  statusBadgeUpcoming: {
+    backgroundColor: '#f3f4f6',
+  },
+
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+
+  statusTextCompleted: {
+    color: '#1b5e20',
+  },
+
+  statusTextOverdue: {
+    color: '#dc2626',
+  },
+
+  statusTextDueToday: {
+    color: '#1d4ed8',
+  },
+
+  statusTextUpcoming: {
+    color: '#4b5563',
+  },
+
+  date: {
     fontSize: 13,
     color: '#777777',
-    marginRight: 8,
   },
 
   deleteButton: {

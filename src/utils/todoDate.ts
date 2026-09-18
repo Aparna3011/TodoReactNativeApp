@@ -20,6 +20,43 @@ export function isTodoScheduledOnDate(
   return todo.start_date === dateKey || todo.end_date === dateKey;
 }
 
+export type TodoStatus = 'COMPLETED' | 'OVERDUE' | 'DUE TODAY' | 'UPCOMING';
+
+/**
+ * Returns the current date in the local device timezone formatted as YYYY-MM-DD.
+ * Does NOT use UTC conversion.
+ */
+export function getLocalTodayDateString(): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Calculates a todo's current status dynamically:
+ * - if completed === 1 -> COMPLETED
+ * - else if end_date < today -> OVERDUE
+ * - else if end_date === today -> DUE TODAY
+ * - else if end_date > today -> UPCOMING
+ */
+export function getTodoStatus(
+  todo: { completed: number; end_date: string },
+  today: string = getLocalTodayDateString(),
+): TodoStatus {
+  if (todo.completed === 1) {
+    return 'COMPLETED';
+  }
+  if (todo.end_date < today) {
+    return 'OVERDUE';
+  }
+  if (todo.end_date === today) {
+    return 'DUE TODAY';
+  }
+  return 'UPCOMING';
+}
+
 /** Todos scheduled for a date using the shared rule (Date Tasks screen). */
 export function getTodosScheduledOnDate(
   todos: Todo[],
@@ -63,4 +100,4 @@ export function groupTodosByDate(todos: Todo[]): Record<string, Todo[]> {
   });
 
   return grouped;
-}
+}

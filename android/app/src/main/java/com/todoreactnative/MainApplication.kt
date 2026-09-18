@@ -8,6 +8,8 @@ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.todoreactnative.sqlite.AndroidSQLitePackage
 import com.todoreactnative.camera.TaskCameraPackage
+import com.todoreactnative.notifications.NotificationHelper
+import com.todoreactnative.notifications.DueTaskScheduler
 
 class MainApplication : Application(), ReactApplication {
 
@@ -27,5 +29,7 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     loadReactNative(this)
+    NotificationHelper.createNotificationChannel(this)
+    DueTaskScheduler.scheduleDailyDueTaskWorker(this)
   }
 }

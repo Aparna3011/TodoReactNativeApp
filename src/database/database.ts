@@ -1,5 +1,6 @@
 import { NativeModules } from 'react-native';
 import type { Todo } from '../types/todo';
+import type { NotificationItem } from '../types/notification';
 
 /**
  * Interface for the native AndroidSQLite module. On Android this opens
@@ -25,6 +26,13 @@ interface NativeTodoDB {
   ): Promise<void>;
   setCompleted(id: number, completed: number): Promise<void>;
   deleteTodo(id: number): Promise<void>;
+  checkAndTriggerStartupDueNotifications(): Promise<number>;
+  getNotifications(): Promise<NotificationItem[]>;
+  getUnreadNotificationCount(): Promise<number>;
+  markNotificationAsRead(id: number): Promise<void>;
+  markAllNotificationsAsRead(): Promise<void>;
+  clearNotifications(): Promise<void>;
+  deleteNotification(id: number): Promise<void>;
 }
 
 const rawNativeDb = NativeModules.AndroidSQLite as NativeTodoDB | undefined;
@@ -58,6 +66,19 @@ export const db = {
   setCompleted: (id: number, completed: number): Promise<void> =>
     nativeDb.setCompleted(id, completed),
   deleteTodo: (id: number): Promise<void> => nativeDb.deleteTodo(id),
+  checkAndTriggerStartupDueNotifications: (): Promise<number> =>
+    nativeDb.checkAndTriggerStartupDueNotifications(),
+  getNotifications: (): Promise<NotificationItem[]> =>
+    nativeDb.getNotifications(),
+  getUnreadNotificationCount: (): Promise<number> =>
+    nativeDb.getUnreadNotificationCount(),
+  markNotificationAsRead: (id: number): Promise<void> =>
+    nativeDb.markNotificationAsRead(id),
+  markAllNotificationsAsRead: (): Promise<void> =>
+    nativeDb.markAllNotificationsAsRead(),
+  clearNotifications: (): Promise<void> => nativeDb.clearNotifications(),
+  deleteNotification: (id: number): Promise<void> =>
+    nativeDb.deleteNotification(id),
 };
 
 /** Opens the database and ensures the schema exists, keeping the connection open. */

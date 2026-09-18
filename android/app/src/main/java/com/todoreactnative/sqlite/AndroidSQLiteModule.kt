@@ -7,6 +7,10 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
+import com.todoreactnative.notifications.NotificationHelper
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * A minimal React Native native module that provides SQLite access through
@@ -33,6 +37,17 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                 "created_at TEXT NOT NULL, " +
                 "completed_at TEXT, " +
                 "image_path TEXT)"
+
+        private const val CREATE_NOTIFICATIONS_TABLE =
+            "CREATE TABLE IF NOT EXISTS notifications (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "todo_id INTEGER NOT NULL, " +
+                "task_name TEXT NOT NULL, " +
+                "due_date TEXT NOT NULL, " +
+                "notified_at TEXT NOT NULL, " +
+                "is_read INTEGER NOT NULL DEFAULT 0, " +
+                "is_resolved INTEGER NOT NULL DEFAULT 0, " +
+                "UNIQUE(todo_id, due_date))"
     }
 
     private var database: SQLiteDatabase? = null
@@ -40,13 +55,9 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
     override fun getName(): String = "AndroidSQLite"
 
     /**
-     * Makes sure the existing todos table contains start_date, completed_at
-     * and image_path.
+     * Makes sure the existing todos and notifications tables contain all required columns.
      *
      * Existing databases do not get recreated or deleted.
-     * Existing tasks remain unchanged and receive NULL for image_path and
-     * completed_at; start_date is backfilled from the date part of their
-     * created_at timestamp.
      */
     private fun ensureColumns(db: SQLiteDatabase) {
         var hasImagePath = false
@@ -84,6 +95,34 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
         if (!hasImagePath) {
             db.execSQL("ALTER TABLE todos ADD COLUMN image_path TEXT")
         }
+
+        // Ensure is_read and is_resolved columns exist in notifications table
+        var hasIsRead = false
+        var hasIsResolved = false
+        try {
+            db.rawQuery("PRAGMA table_info(notifications)", null).use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                while (cursor.moveToNext()) {
+                    val colName = cursor.getString(nameIndex)
+                    if (colName == "is_read") {
+                        hasIsRead = true
+                    }
+                    if (colName == "is_resolved") {
+                        hasIsResolved = true
+                    }
+                }
+            }
+            if (!hasIsRead) {
+                db.execSQL("ALTER TABLE notifications ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0")
+            }
+            if (!hasIsResolved) {
+                db.execSQL("ALTER TABLE notifications ADD COLUMN is_resolved INTEGER NOT NULL DEFAULT 0")
+                // Backfill completed todos as resolved
+                db.execSQL("UPDATE notifications SET is_resolved = 1 WHERE todo_id IN (SELECT id FROM todos WHERE completed = 1)")
+            }
+        } catch (e: Exception) {
+            // Table might not exist yet if fresh, created by CREATE_NOTIFICATIONS_TABLE
+        }
     }
     /**
      * Opens (or lazily reopens) the Todo database in the app's standard
@@ -108,9 +147,10 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
 
         val db = SQLiteDatabase.openOrCreateDatabase(path, null)
 
-        // Creates the table for a fresh installation.
-        // Does nothing if the table already exists.
+        // Creates the tables for a fresh installation.
+        // Does nothing if the tables already exist.
         db.execSQL(CREATE_TABLE)
+        db.execSQL(CREATE_NOTIFICATIONS_TABLE)
 
         // Migrates an existing database without deleting existing data.
         ensureColumns(db)
@@ -256,6 +296,7 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
     ) {
         try {
             val db = getDatabase()
+            val todoId = id.toLong()
 
             // completed and completed_at are intentionally untouched: completion
             // is managed by setCompleted, not by editing task details.
@@ -266,9 +307,19 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                     startDate,
                     endDate,
                     imagePath,
-                    id.toLong(),
+                    todoId,
                 ),
             )
+
+            // If due date was changed away from today, mark today's notification resolved and cancel Android notification
+            val localToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            if (endDate != localToday) {
+                db.execSQL(
+                    "UPDATE notifications SET is_resolved = 1 WHERE todo_id = ?",
+                    arrayOf<Any?>(todoId),
+                )
+                NotificationHelper.cancelDueTaskNotification(reactApplicationContext, todoId)
+            }
 
             promise.resolve(null)
         } catch (e: Exception) {
@@ -284,8 +335,8 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
     ) {
         try {
             val db = getDatabase()
-
             val completedValue = completed.toLong()
+            val todoId = id.toLong()
 
             if (completedValue == 1L) {
                 // Mark complete: stamp the current time only when the task does
@@ -297,15 +348,49 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                         "THEN ? ELSE completed_at END WHERE id = ?",
                     arrayOf<Any?>(
                         java.time.Instant.now().toString(),
-                        id.toLong(),
+                        todoId,
                     ),
                 )
+
+                // Mark notification resolved for this todo
+                db.execSQL(
+                    "UPDATE notifications SET is_resolved = 1 WHERE todo_id = ?",
+                    arrayOf<Any?>(todoId),
+                )
+
+                // Cancel active Android notification specifically for this todo
+                NotificationHelper.cancelDueTaskNotification(reactApplicationContext, todoId)
             } else {
                 // Mark pending: clear the completion status and date.
                 db.execSQL(
                     "UPDATE todos SET completed = 0, completed_at = NULL WHERE id = ?",
-                    arrayOf<Any?>(id.toLong()),
+                    arrayOf<Any?>(todoId),
                 )
+
+                // If uncompleted and still due today, reactivate today's notification
+                val localToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                var isDue = false
+                var taskName = ""
+                var dueDate = ""
+
+                db.rawQuery(
+                    "SELECT task_name, end_date FROM todos WHERE id = ? AND end_date = ?",
+                    arrayOf(todoId.toString(), localToday),
+                ).use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        isDue = true
+                        taskName = cursor.getString(cursor.getColumnIndexOrThrow("task_name"))
+                        dueDate = cursor.getString(cursor.getColumnIndexOrThrow("end_date"))
+                    }
+                }
+
+                if (isDue) {
+                    db.execSQL(
+                        "UPDATE notifications SET is_resolved = 0 WHERE todo_id = ?",
+                        arrayOf<Any?>(todoId),
+                    )
+                    NotificationHelper.showDueTaskNotification(reactApplicationContext, todoId, taskName, dueDate)
+                }
             }
 
             promise.resolve(null)
@@ -321,14 +406,200 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
     ) {
         try {
             val db = getDatabase()
+            val todoId = id.toLong()
 
+            // Cancel active Android notification for this todo
+            NotificationHelper.cancelDueTaskNotification(reactApplicationContext, todoId)
+
+            // Delete from todos (keeping notification history in SQLite)
             db.execSQL(
                 "DELETE FROM todos WHERE id = ?",
                 arrayOf<Any?>(
-                    id.toLong(),
+                    todoId,
                 ),
             )
 
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun checkAndTriggerStartupDueNotifications(promise: Promise) {
+        try {
+            val db = getDatabase()
+            val localToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val currentTimestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+
+            val dueTasks = mutableListOf<Triple<Long, String, String>>()
+
+            // Check for tasks due today ONLY (completed = 0 and end_date = localToday)
+            db.rawQuery(
+                "SELECT id, task_name, end_date FROM todos WHERE end_date = ? AND completed = 0",
+                arrayOf(localToday),
+            ).use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow("id")
+                val nameIndex = cursor.getColumnIndexOrThrow("task_name")
+                val dateIndex = cursor.getColumnIndexOrThrow("end_date")
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idIndex)
+                    val name = cursor.getString(nameIndex)
+                    val endDate = cursor.getString(dateIndex)
+                    dueTasks.add(Triple(id, name, endDate))
+                }
+            }
+
+            if (dueTasks.isEmpty()) {
+                promise.resolve(0)
+                return
+            }
+
+            var newNotificationsCount = 0
+
+            for ((todoId, taskName, dueDate) in dueTasks) {
+                var existingNotificationId: Long? = null
+                var isResolved = 0
+
+                db.rawQuery(
+                    "SELECT id, is_resolved FROM notifications WHERE todo_id = ? AND substr(notified_at, 1, 10) = ?",
+                    arrayOf(todoId.toString(), localToday),
+                ).use { checkCursor ->
+                    if (checkCursor.moveToFirst()) {
+                        existingNotificationId = checkCursor.getLong(0)
+                        isResolved = checkCursor.getInt(1)
+                    }
+                }
+
+                if (existingNotificationId == null) {
+                    db.execSQL(
+                        "INSERT OR IGNORE INTO notifications (todo_id, task_name, due_date, notified_at, is_read, is_resolved) VALUES (?, ?, ?, ?, 0, 0)",
+                        arrayOf<Any?>(todoId, taskName, dueDate, currentTimestamp),
+                    )
+                    newNotificationsCount++
+                    NotificationHelper.showDueTaskNotification(reactApplicationContext, todoId, taskName, dueDate)
+                } else if (isResolved == 1) {
+                    // Reactivate if resolved but todo is currently pending and due
+                    db.execSQL(
+                        "UPDATE notifications SET is_resolved = 0 WHERE id = ?",
+                        arrayOf<Any?>(existingNotificationId),
+                    )
+                    NotificationHelper.showDueTaskNotification(reactApplicationContext, todoId, taskName, dueDate)
+                }
+            }
+
+            promise.resolve(newNotificationsCount)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun getUnreadNotificationCount(promise: Promise) {
+        try {
+            val db = getDatabase()
+            var count = 0.0
+            db.rawQuery(
+                "SELECT COUNT(*) FROM notifications WHERE is_read = 0 AND is_resolved = 0",
+                null,
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    count = cursor.getLong(0).toDouble()
+                }
+            }
+            promise.resolve(count)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun markNotificationAsRead(
+        id: Double,
+        promise: Promise,
+    ) {
+        try {
+            val db = getDatabase()
+            db.execSQL(
+                "UPDATE notifications SET is_read = 1 WHERE id = ?",
+                arrayOf<Any?>(id.toLong()),
+            )
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun markAllNotificationsAsRead(promise: Promise) {
+        try {
+            val db = getDatabase()
+            db.execSQL("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun getNotifications(promise: Promise) {
+        try {
+            val db = getDatabase()
+            val result = Arguments.createArray()
+
+            db.rawQuery(
+                "SELECT id, todo_id, task_name, due_date, notified_at, is_read, is_resolved FROM notifications ORDER BY id DESC",
+                null,
+            ).use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow("id")
+                val todoIdIndex = cursor.getColumnIndexOrThrow("todo_id")
+                val taskNameIndex = cursor.getColumnIndexOrThrow("task_name")
+                val dueDateIndex = cursor.getColumnIndexOrThrow("due_date")
+                val notifiedAtIndex = cursor.getColumnIndexOrThrow("notified_at")
+                val isReadIndex = cursor.getColumnIndexOrThrow("is_read")
+                val isResolvedIndex = cursor.getColumnIndexOrThrow("is_resolved")
+
+                while (cursor.moveToNext()) {
+                    val row: WritableMap = Arguments.createMap()
+                    row.putDouble("id", cursor.getLong(idIndex).toDouble())
+                    row.putDouble("todo_id", cursor.getLong(todoIdIndex).toDouble())
+                    row.putString("task_name", cursor.getString(taskNameIndex))
+                    row.putString("due_date", cursor.getString(dueDateIndex))
+                    row.putString("notified_at", cursor.getString(notifiedAtIndex))
+                    row.putDouble("is_read", cursor.getLong(isReadIndex).toDouble())
+                    row.putDouble("is_resolved", cursor.getLong(isResolvedIndex).toDouble())
+                    result.pushMap(row)
+                }
+            }
+
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun clearNotifications(promise: Promise) {
+        try {
+            val db = getDatabase()
+            db.execSQL("DELETE FROM notifications")
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun deleteNotification(
+        id: Double,
+        promise: Promise,
+    ) {
+        try {
+            val db = getDatabase()
+            db.execSQL(
+                "DELETE FROM notifications WHERE id = ?",
+                arrayOf<Any?>(id.toLong()),
+            )
             promise.resolve(null)
         } catch (e: Exception) {
             promise.reject(ERROR_CODE, e.message, e)
