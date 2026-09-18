@@ -1,22 +1,16 @@
-import React, {useCallback, useState} from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
-import {useFocusEffect} from '@react-navigation/native';
-import {CircleCheck, Clock, ListTodo, UserRound} from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
+import { useFocusEffect } from '@react-navigation/native';
+import { CircleCheck, Clock, ListTodo, UserRound } from 'lucide-react-native';
 
-import {getTodos} from '../database/todoRepository';
-import type {Todo} from '../types/todo';
+import { getTodos } from '../database/todoRepository';
+import type { Todo } from '../types/todo';
 
 type StatRow = {
   label: string;
   value: number;
-  Icon: React.ComponentType<{size?: number; color?: string}>;
+  Icon: React.ComponentType<{ size?: number; color?: string }>;
   iconColor: string;
   iconBackground: string;
 };
@@ -75,7 +69,8 @@ function ProfileScreen(): React.JSX.Element {
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <View style={styles.avatar}>
               <UserRound size={42} color="#222222" />
@@ -102,7 +97,7 @@ function ProfileScreen(): React.JSX.Element {
                   <View
                     style={[
                       styles.rowIcon,
-                      {backgroundColor: row.iconBackground},
+                      { backgroundColor: row.iconBackground },
                     ]}
                   >
                     <RowIcon size={22} color={row.iconColor} />

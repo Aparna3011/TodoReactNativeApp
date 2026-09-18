@@ -1,10 +1,5 @@
 import React from 'react';
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   createBottomTabNavigator,
   type BottomTabBarProps,
@@ -51,7 +46,7 @@ type TabBarIconProps = {
 type TabBarIconRenderer = (props: TabBarIconProps) => React.ReactNode;
 
 function makeTabBarIcon(Icon: TabIconComponent): TabBarIconRenderer {
-  return function TabBarIcon({focused, color}: TabBarIconProps) {
+  return function TabBarIcon({ focused, color }: TabBarIconProps) {
     return (
       <Icon
         size={focused ? 24 : 22}
@@ -98,7 +93,7 @@ function ControlledBottomTabBar({
             },
           ]}
           onLayout={event => {
-            const {height} = event.nativeEvent.layout;
+            const { height } = event.nativeEvent.layout;
             onHeightChange?.(height);
           }}
           accessibilityRole="tablist"
@@ -107,7 +102,7 @@ function ControlledBottomTabBar({
           <View style={styles.visibleTabBarContent}>
             {state.routes.map((route, index) => {
               const isFocused = state.index === index;
-              const {options} = descriptors[route.key];
+              const { options } = descriptors[route.key];
               const routeName = route.name as keyof MainTabParamList;
               const label =
                 typeof options.tabBarLabel === 'string'
@@ -140,7 +135,7 @@ function ControlledBottomTabBar({
                 <TouchableOpacity
                   key={route.key}
                   accessibilityRole="tab"
-                  accessibilityState={isFocused ? {selected: true} : {}}
+                  accessibilityState={isFocused ? { selected: true } : {}}
                   accessibilityLabel={
                     typeof options.tabBarAccessibilityLabel === 'string'
                       ? options.tabBarAccessibilityLabel
@@ -155,12 +150,14 @@ function ControlledBottomTabBar({
                   activeOpacity={0.7}
                 >
                   <View style={styles.iconContainer}>
-                    {iconRenderer ? iconRenderer({focused: isFocused, color}) : null}
+                    {iconRenderer
+                      ? iconRenderer({ focused: isFocused, color })
+                      : null}
                   </View>
                   <Text
                     style={[
                       styles.tabLabel,
-                      {color},
+                      { color },
                       isFocused && styles.tabLabelFocused,
                     ]}
                     numberOfLines={1}
@@ -175,7 +172,7 @@ function ControlledBottomTabBar({
           {/* 2. Bottom System Navigation Spacer (Physical reservation for 3-button nav / gesture nav) */}
           {bottomInset > 0 && (
             <View
-              style={[styles.systemNavigationSpacer, {height: bottomInset}]}
+              style={[styles.systemNavigationSpacer, { height: bottomInset }]}
               pointerEvents="none"
               aria-hidden={true}
             />
@@ -193,7 +190,8 @@ function BottomTabNavigator(): React.JSX.Element {
       tabBar={ControlledBottomTabBar}
       screenOptions={{
         headerShown: false,
-      }}>
+      }}
+    >
       <Tab.Screen name="Tasks" component={HomeScreen} />
       <Tab.Screen name="Calendar" component={CalendarScreen} />
       <Tab.Screen name="Stats" component={StatsScreen} />
@@ -209,7 +207,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#e0e0e0',
     elevation: 8,
     shadowColor: '#000000',
-    shadowOffset: {width: 0, height: -2},
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
   },

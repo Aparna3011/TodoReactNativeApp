@@ -1,13 +1,7 @@
-import React, {useCallback, useState} from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import SafeAreaScreen, {TAB_SCREEN_EDGES} from '../components/SafeAreaScreen';
-import {useFocusEffect} from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ChartNoAxesColumnIncreasing,
   CircleCheck,
@@ -15,8 +9,8 @@ import {
   ListTodo,
 } from 'lucide-react-native';
 
-import {getTodos} from '../database/todoRepository';
-import type {Todo} from '../types/todo';
+import { getTodos } from '../database/todoRepository';
+import type { Todo } from '../types/todo';
 
 function StatsScreen(): React.JSX.Element {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -59,7 +53,8 @@ function StatsScreen(): React.JSX.Element {
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.cardsRow}>
             <View style={styles.card}>
               <View style={[styles.cardIcon, styles.cardIconTotal]}>

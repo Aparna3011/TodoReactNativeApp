@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AppState,
-  ScrollView,
-  StatusBar,
-  View,
-} from 'react-native';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { AppState, ScrollView, StatusBar, View } from 'react-native';
 import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -156,7 +157,7 @@ function CalendarScreen(): React.JSX.Element {
      ======================================================= */
 
   const markedDates = useMemo(() => {
-    const marked: Record<string, {marked?: boolean; selected?: boolean}> = {};
+    const marked: Record<string, { marked?: boolean; selected?: boolean }> = {};
 
     // Dots come from the same date keys that render task chips, so a dot can
     // never mark a day the calendar would not show a task for.

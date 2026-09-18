@@ -13,7 +13,11 @@ import SafeAreaScreen, {
   FULL_SCREEN_EDGES,
 } from '../components/SafeAreaScreen';
 import TaskImage from '../components/TaskImage';
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
@@ -23,7 +27,10 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 
 import { getTodosScheduledOnDate } from '../utils/todoDate';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'DateTasks'>;
+type NavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'DateTasks'
+>;
 type DateTasksRouteProp = RouteProp<RootStackParamList, 'DateTasks'>;
 
 function formatDateLabel(endDate: string): string {
@@ -131,7 +138,9 @@ function DateTasksScreen(): React.JSX.Element {
           <Text style={styles.subtitle}>
             {todos.length === 0
               ? 'No tasks scheduled'
-              : `${todos.length} ${todos.length === 1 ? 'task' : 'tasks'} scheduled`}
+              : `${todos.length} ${
+                  todos.length === 1 ? 'task' : 'tasks'
+                } scheduled`}
           </Text>
         </View>
 
@@ -155,10 +164,7 @@ function DateTasksScreen(): React.JSX.Element {
 
           return (
             <View
-              style={[
-                styles.taskCard,
-                completed && styles.taskCardCompleted,
-              ]}
+              style={[styles.taskCard, completed && styles.taskCardCompleted]}
             >
               {/* TASK CONTENT ROW */}
               <View style={styles.taskCardRow}>

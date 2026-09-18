@@ -172,9 +172,7 @@ function HomeScreen(): React.JSX.Element {
                     ]}
                     onPress={() => handleToggle(item)}
                   >
-                    {completed && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
+                    {completed && <Text style={styles.checkmark}>✓</Text>}
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -206,7 +204,7 @@ function HomeScreen(): React.JSX.Element {
                 {/* BOTTOM ROW: dates + delete */}
                 <View style={styles.taskCardBottomRow}>
                   <Text style={styles.date} numberOfLines={1}>
-                    Start: {item.start_date}  ·  Due: {item.end_date}
+                    Start: {item.start_date} · Due: {item.end_date}
                   </Text>
 
                   <TouchableOpacity

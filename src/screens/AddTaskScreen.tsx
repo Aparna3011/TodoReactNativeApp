@@ -8,7 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import SafeAreaScreen, { FULL_SCREEN_EDGES } from '../components/SafeAreaScreen';
+import SafeAreaScreen, {
+  FULL_SCREEN_EDGES,
+} from '../components/SafeAreaScreen';
 import TaskForm from '../components/TaskForm';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -69,14 +71,13 @@ function AddTaskScreen(): React.JSX.Element {
                           └── ScrollView (flex: 1)
                                 └── TaskForm (all fields + Save/Cancel)
         */}
-        <KeyboardAvoidingView
-          behavior="height"
-          style={styles.formArea}>
+        <KeyboardAvoidingView behavior="height" style={styles.formArea}>
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
+            showsVerticalScrollIndicator={false}
+          >
             <TaskForm
               initialStartDate={initialStartDate}
               initialEndDate={initialEndDate}

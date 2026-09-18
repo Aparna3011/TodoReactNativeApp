@@ -8,7 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import SafeAreaScreen, { FULL_SCREEN_EDGES } from '../components/SafeAreaScreen';
+import SafeAreaScreen, {
+  FULL_SCREEN_EDGES,
+} from '../components/SafeAreaScreen';
 import TaskForm from '../components/TaskForm';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -48,14 +50,13 @@ function EditTaskScreen(): React.JSX.Element {
           Ensures the full image preview, all fields, and Save / Cancel buttons
           are always reachable by scrolling, even on small screens.
         */}
-        <KeyboardAvoidingView
-          behavior="height"
-          style={styles.formArea}>
+        <KeyboardAvoidingView behavior="height" style={styles.formArea}>
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
+            showsVerticalScrollIndicator={false}
+          >
             <TaskForm
               initialName={todo.task_name}
               initialStartDate={todo.start_date}
