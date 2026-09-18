@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   ScrollView,
   StatusBar,
@@ -20,21 +21,6 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddTask'>;
 type AddRouteProp = RouteProp<RootStackParamList, 'AddTask'>;
 
 /**
- * Add Task screen. All task form fields and behavior (name, end date, image
- * capture/remove, validation, save button) come from the shared TaskForm; this
- * screen only passes the pre-selected date, the label, and the insert logic.
- */
-function getTodayDateString(): string {
-  const date = new Date();
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-/**
  * Add Task screen. All task form fields and behavior (name, start date,
  * due date, image capture/remove, validation, save button) come from the
  * shared TaskForm; this screen only passes the pre-selected date(s), the
@@ -44,14 +30,16 @@ function AddTaskScreen(): React.JSX.Element {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<AddRouteProp>();
 
-  const initialDate = route.params?.initialDate;
-
   /*
-   * When the calendar pre-selects a date, both start and due date default to
-   * that date. This way the task is associated with exactly the calendar date
-   * the user tapped. The user can still adjust either date in the form.
+   * The Calendar and Date Tasks screens pre-select the start date and the due
+   * date to the exact date the user tapped, so the task is associated with
+   * that calendar date. Both names are explicit (initialStartDate /
+   * initialEndDate) rather than an ambiguous initialDate, so it is always
+   * clear which field receives the selected date. The user can still adjust
+   * either date in the form.
    */
-  const initialStartDate = initialDate ?? undefined;
+  const initialStartDate = route.params?.initialStartDate;
+  const initialEndDate = route.params?.initialEndDate;
 
   return (
     <SafeAreaScreen style={styles.safeArea} edges={FULL_SCREEN_EDGES}>
@@ -91,7 +79,7 @@ function AddTaskScreen(): React.JSX.Element {
             showsVerticalScrollIndicator={false}>
             <TaskForm
               initialStartDate={initialStartDate}
-              initialEndDate={initialDate}
+              initialEndDate={initialEndDate}
               submitLabel="Save Task"
               onSubmit={async ({
                 taskName,
@@ -99,13 +87,20 @@ function AddTaskScreen(): React.JSX.Element {
                 endDateString,
                 imagePath,
               }) => {
-                await addTodo(
-                  taskName,
-                  startDateString,
-                  endDateString,
-                  imagePath,
-                );
-                navigation.goBack();
+                try {
+                  await addTodo(
+                    taskName,
+                    startDateString,
+                    endDateString,
+                    imagePath,
+                  );
+                  navigation.goBack();
+                } catch (error) {
+                  console.error('Failed to add task:', error);
+                  Alert.alert('Error', 'Unable to save the task.');
+                  // Rethrow so TaskForm can clean up the unsaved captured image.
+                  throw error;
+                }
               }}
             />
           </ScrollView>

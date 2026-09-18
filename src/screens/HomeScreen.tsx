@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  Alert,
   FlatList,
   StatusBar,
   StyleSheet,
@@ -71,13 +72,23 @@ function HomeScreen(): React.JSX.Element {
   });
 
   const handleToggle = async (todo: Todo) => {
-    await toggleTodo(todo.id, todo.completed);
-    await loadTodos();
+    try {
+      await toggleTodo(todo.id, todo.completed);
+      await loadTodos();
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      Alert.alert('Error', 'Unable to update the task.');
+    }
   };
 
   const handleDelete = async (id: number) => {
-    await deleteTodo(id);
-    await loadTodos();
+    try {
+      await deleteTodo(id);
+      await loadTodos();
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      Alert.alert('Error', 'Unable to delete the task.');
+    }
   };
 
   // The tab screen's container ends exactly at the top edge of the tab bar.

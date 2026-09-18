@@ -85,10 +85,6 @@ function ControlledBottomTabBar({
   const leftInset = insets.left;
   const rightInset = insets.right;
 
-  // Temporary development logging to verify runtime safe area insets
-  console.log('BOTTOM TAB SAFE AREA INSETS', insets);
-  console.log('BOTTOM TAB TOTAL HEIGHT', VISIBLE_TAB_BAR_HEIGHT + insets.bottom);
-
   return (
     <BottomTabBarHeightCallbackContext.Consumer>
       {onHeightChange => (

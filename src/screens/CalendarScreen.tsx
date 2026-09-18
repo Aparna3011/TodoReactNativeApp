@@ -185,7 +185,8 @@ function CalendarScreen(): React.JSX.Element {
       const tasksForDate = todosByDate[date] ?? [];
       if (tasksForDate.length === 0) {
         navigation.navigate('AddTask', {
-          initialDate: date,
+          initialStartDate: date,
+          initialEndDate: date,
         });
       } else {
         navigation.navigate('DateTasks', {

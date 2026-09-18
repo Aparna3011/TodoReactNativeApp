@@ -4,6 +4,6 @@ module.exports = {
     '^.+\\.(js|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@react-navigation|lucide-react-native|react-native-svg)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@react-navigation|lucide-react-native|react-native-svg|react-native-calendars|react-native-swipe-gestures)/)',
   ],
 };

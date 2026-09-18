@@ -73,6 +73,7 @@ function DateTasksScreen(): React.JSX.Element {
       await loadDateTodos();
     } catch (error) {
       console.error('Failed to toggle task:', error);
+      Alert.alert('Error', 'Unable to update the task.');
     }
   };
 
@@ -100,7 +101,8 @@ function DateTasksScreen(): React.JSX.Element {
 
   const handleAddTask = () => {
     navigation.navigate('AddTask', {
-      initialDate: date,
+      initialStartDate: date,
+      initialEndDate: date,
     });
   };
 

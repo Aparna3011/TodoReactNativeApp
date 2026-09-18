@@ -11,7 +11,8 @@ export type RootStackParamList = {
   Home: undefined;
   AddTask:
     | {
-        initialDate?: string;
+        initialStartDate?: string;
+        initialEndDate?: string;
       }
     | undefined;
   EditTask: {
