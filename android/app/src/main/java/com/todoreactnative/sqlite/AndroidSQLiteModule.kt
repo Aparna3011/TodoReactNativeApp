@@ -7,6 +7,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
+import com.todoreactnative.notifications.DueTaskNotifier
 import com.todoreactnative.notifications.NotificationHelper
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,16 +39,6 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                 "completed_at TEXT, " +
                 "image_path TEXT)"
 
-        private const val CREATE_NOTIFICATIONS_TABLE =
-            "CREATE TABLE IF NOT EXISTS notifications (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "todo_id INTEGER NOT NULL, " +
-                "task_name TEXT NOT NULL, " +
-                "due_date TEXT NOT NULL, " +
-                "notified_at TEXT NOT NULL, " +
-                "is_read INTEGER NOT NULL DEFAULT 0, " +
-                "is_resolved INTEGER NOT NULL DEFAULT 0, " +
-                "UNIQUE(todo_id, due_date))"
     }
 
     private var database: SQLiteDatabase? = null
@@ -121,7 +112,7 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                 db.execSQL("UPDATE notifications SET is_resolved = 1 WHERE todo_id IN (SELECT id FROM todos WHERE completed = 1)")
             }
         } catch (e: Exception) {
-            // Table might not exist yet if fresh, created by CREATE_NOTIFICATIONS_TABLE
+            // Table might not exist yet on a fresh install; it is created by DueTaskNotifier.CREATE_NOTIFICATIONS_TABLE in getDatabase().
         }
     }
     /**
@@ -150,7 +141,7 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
         // Creates the tables for a fresh installation.
         // Does nothing if the tables already exist.
         db.execSQL(CREATE_TABLE)
-        db.execSQL(CREATE_NOTIFICATIONS_TABLE)
+        db.execSQL(DueTaskNotifier.CREATE_NOTIFICATIONS_TABLE)
 
         // Migrates an existing database without deleting existing data.
         ensureColumns(db)
@@ -455,36 +446,26 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                 return
             }
 
+            /*
+             * Single deduplication source, shared with DueTaskWorker: a
+             * notifications row is created at most once per (todo_id, due_date).
+             * The count is only incremented and the Android notification shown
+             * when a row was ACTUALLY created (never when an insert was skipped).
+             */
             var newNotificationsCount = 0
 
             for ((todoId, taskName, dueDate) in dueTasks) {
-                var existingNotificationId: Long? = null
-                var isResolved = 0
+                val outcome = DueTaskNotifier.ensureDueTaskNotified(
+                    context = reactApplicationContext,
+                    db = db,
+                    todoId = todoId,
+                    taskName = taskName,
+                    dueDate = dueDate,
+                    notifiedAt = currentTimestamp,
+                )
 
-                db.rawQuery(
-                    "SELECT id, is_resolved FROM notifications WHERE todo_id = ? AND substr(notified_at, 1, 10) = ?",
-                    arrayOf(todoId.toString(), localToday),
-                ).use { checkCursor ->
-                    if (checkCursor.moveToFirst()) {
-                        existingNotificationId = checkCursor.getLong(0)
-                        isResolved = checkCursor.getInt(1)
-                    }
-                }
-
-                if (existingNotificationId == null) {
-                    db.execSQL(
-                        "INSERT OR IGNORE INTO notifications (todo_id, task_name, due_date, notified_at, is_read, is_resolved) VALUES (?, ?, ?, ?, 0, 0)",
-                        arrayOf<Any?>(todoId, taskName, dueDate, currentTimestamp),
-                    )
+                if (outcome == DueTaskNotifier.Outcome.INSERTED) {
                     newNotificationsCount++
-                    NotificationHelper.showDueTaskNotification(reactApplicationContext, todoId, taskName, dueDate)
-                } else if (isResolved == 1) {
-                    // Reactivate if resolved but todo is currently pending and due
-                    db.execSQL(
-                        "UPDATE notifications SET is_resolved = 0 WHERE id = ?",
-                        arrayOf<Any?>(existingNotificationId),
-                    )
-                    NotificationHelper.showDueTaskNotification(reactApplicationContext, todoId, taskName, dueDate)
                 }
             }
 

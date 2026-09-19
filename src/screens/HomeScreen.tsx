@@ -103,14 +103,23 @@ function HomeScreen(): React.JSX.Element {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    try {
-      await deleteTodo(id);
-      await loadData();
-    } catch (error) {
-      console.error('Failed to delete task:', error);
-      Alert.alert('Error', 'Unable to delete the task.');
-    }
+  const handleDelete = (todo: Todo) => {
+    Alert.alert('Delete Task', `Delete "${todo.task_name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteTodo(todo.id);
+            await loadData();
+          } catch (error) {
+            console.error('Failed to delete task:', error);
+            Alert.alert('Error', 'Unable to delete the task.');
+          }
+        },
+      },
+    ]);
   };
 
   // The tab screen's container ends exactly at the top edge of the tab bar.
@@ -310,7 +319,7 @@ function HomeScreen(): React.JSX.Element {
 
                   <TouchableOpacity
                     style={styles.deleteButton}
-                    onPress={() => handleDelete(item.id)}
+                    onPress={() => handleDelete(item)}
                   >
                     <Text style={styles.deleteText}>Delete</Text>
                   </TouchableOpacity>
