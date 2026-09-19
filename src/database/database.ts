@@ -10,6 +10,7 @@ import type { NotificationItem } from '../types/notification';
 interface NativeTodoDB {
   initialize(): Promise<void>;
   getTodos(): Promise<Todo[]>;
+  getTodoById(id: number): Promise<Todo | null>;
   addTodo(
     taskName: string,
     startDate: string,
@@ -47,6 +48,7 @@ const nativeDb: NativeTodoDB = rawNativeDb;
 
 export const db = {
   getTodos: (): Promise<Todo[]> => nativeDb.getTodos(),
+  getTodoById: (id: number): Promise<Todo | null> => nativeDb.getTodoById(id),
   addTodo: (
     taskName: string,
     startDate: string,

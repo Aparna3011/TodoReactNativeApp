@@ -35,6 +35,9 @@ local.properties
 !debug.keystore
 .kotlin/
 
+# Local release signing secrets (copy from android/keystore.properties.example)
+keystore.properties
+
 # node.js
 #
 node_modules/

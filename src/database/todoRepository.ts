@@ -5,6 +5,15 @@ export async function getTodos(): Promise<Todo[]> {
   return db.getTodos();
 }
 
+export async function getTodoById(id: number): Promise<Todo | null> {
+  try {
+    return await db.getTodoById(id);
+  } catch (error) {
+    console.error('Failed to get todo by id:', error);
+    return null;
+  }
+}
+
 export async function addTodo(
   taskName: string,
   startDate: string,

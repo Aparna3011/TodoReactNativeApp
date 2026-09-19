@@ -72,6 +72,86 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+/**
+ * ============ RELEASE SIGNING (secrets NEVER committed) ============
+ *
+ * The upload keystore file and its passwords are intentionally NOT part of
+ * this repository. Values are resolved in this order:
+ *
+ *   1. Environment variables:
+ *        TODO_UPLOAD_STORE_FILE / TODO_UPLOAD_KEY_ALIAS /
+ *        TODO_UPLOAD_STORE_PASSWORD / TODO_UPLOAD_KEY_PASSWORD
+ *   2. android/keystore.properties (gitignored - copy keystore.properties.example)
+ *   3. User-level ~/.gradle/gradle.properties (MYAPP_UPLOAD_* keys) - the
+ *      classic React Native recommended location.
+ *
+ * Behavior:
+ *   - When the secrets ARE present, debug builds are signed with the upload
+ *     key so install-over between debug and release builds keeps working, and
+ *     release builds are properly signed.
+ *   - When they are NOT present (e.g. a fresh clone without the keystore),
+ *     debug builds fall back to the standard auto-generated debug.keystore and
+ *     release builds are produced UNSIGNED with a loud warning below - an
+ *     unsigned APK must never be published.
+ *
+ * See docs/SIGNING.md for the complete clean-build guide.
+ */
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def resolveSigningValue = { String key, String envName ->
+    def envValue = System.getenv(envName)
+    if (envValue != null && !envValue.isEmpty()) {
+        return envValue
+    }
+    def fileValue = keystoreProperties.getProperty(key)
+    if (fileValue != null && !fileValue.isEmpty()) {
+        return fileValue
+    }
+    if (project.hasProperty(key)) {
+        return project.property(key)
+    }
+    return null
+}
+
+def resolveKeystoreFile = { String pathValue ->
+    if (pathValue == null) {
+        return null
+    }
+    def candidate = new File(pathValue)
+    if (candidate.isAbsolute()) {
+        return candidate
+    }
+    // Relative paths are tried against the app module directory first, then
+    // against the Android project root, so both the "android/app/keystore/..."
+    // and "android/keystore/..." layouts keep working.
+    def inAppModule = new File(projectDir, pathValue)
+    if (inAppModule.exists()) {
+        return inAppModule
+    }
+    return new File(rootDir, pathValue)
+}
+
+def uploadStoreFile = resolveSigningValue("MYAPP_UPLOAD_STORE_FILE", "TODO_UPLOAD_STORE_FILE")
+def uploadKeyAlias = resolveSigningValue("MYAPP_UPLOAD_KEY_ALIAS", "TODO_UPLOAD_KEY_ALIAS")
+def uploadStorePassword = resolveSigningValue("MYAPP_UPLOAD_STORE_PASSWORD", "TODO_UPLOAD_STORE_PASSWORD")
+def uploadKeyPassword = resolveSigningValue("MYAPP_UPLOAD_KEY_PASSWORD", "TODO_UPLOAD_KEY_PASSWORD")
+
+def hasUploadSigning =
+    uploadStoreFile != null &&
+    uploadKeyAlias != null &&
+    uploadStorePassword != null &&
+    uploadKeyPassword != null
+
+if (hasUploadSigning) {
+    println "RELEASE SIGNING: using upload key alias '$uploadKeyAlias' from '${resolveKeystoreFile(uploadStoreFile)}'"
+} else {
+    logger.warn("RELEASE SIGNING: no upload keystore configured. Debug builds will use the debug keystore; release builds will be UNSIGNED. See docs/SIGNING.md to configure.")
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -87,20 +167,30 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file(MYAPP_UPLOAD_STORE_FILE)
-            storePassword MYAPP_UPLOAD_STORE_PASSWORD
-            keyAlias MYAPP_UPLOAD_KEY_ALIAS
-            keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            if (hasUploadSigning) {
+                storeFile resolveKeystoreFile(uploadStoreFile)
+                storePassword uploadStorePassword
+                keyAlias uploadKeyAlias
+                keyPassword uploadKeyPassword
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig signingConfigs.release
+            // Keep using the upload key for debug installs when it is
+            // configured, otherwise fall back to the standard auto-generated
+            // debug keystore so a machine without the release keystore can
+            // still build and run the app.
+            if (hasUploadSigning) {
+                signingConfig signingConfigs.release
+            }
         }
 
         release {
-            signingConfig signingConfigs.release
+            if (hasUploadSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }

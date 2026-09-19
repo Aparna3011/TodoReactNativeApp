@@ -1,5 +1,6 @@
 package com.todoreactnative.sqlite
 
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -160,6 +161,38 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    /**
+     * Maps the current cursor row of the todos table to the JS Todo shape.
+     * The cursor must already be positioned on a valid row (moveToFirst /
+     * moveToNext must have returned true).
+     */
+    private fun mapTodoRow(cursor: Cursor): WritableMap {
+        val row: WritableMap = Arguments.createMap()
+
+        row.putDouble("id", cursor.getLong(cursor.getColumnIndexOrThrow("id")).toDouble())
+        row.putString("task_name", cursor.getString(cursor.getColumnIndexOrThrow("task_name")))
+        row.putString("start_date", cursor.getString(cursor.getColumnIndexOrThrow("start_date")))
+        row.putString("end_date", cursor.getString(cursor.getColumnIndexOrThrow("end_date")))
+        row.putDouble("completed", cursor.getLong(cursor.getColumnIndexOrThrow("completed")).toDouble())
+        row.putString("created_at", cursor.getString(cursor.getColumnIndexOrThrow("created_at")))
+
+        val completedAtIndex = cursor.getColumnIndexOrThrow("completed_at")
+        if (cursor.isNull(completedAtIndex)) {
+            row.putNull("completed_at")
+        } else {
+            row.putString("completed_at", cursor.getString(completedAtIndex))
+        }
+
+        val imagePathIndex = cursor.getColumnIndexOrThrow("image_path")
+        if (cursor.isNull(imagePathIndex)) {
+            row.putNull("image_path")
+        } else {
+            row.putString("image_path", cursor.getString(imagePathIndex))
+        }
+
+        return row
+    }
+
     @ReactMethod
     fun getTodos(promise: Promise) {
         try {
@@ -172,71 +205,35 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                 null,
             ).use { cursor ->
 
-                val idIndex = cursor.getColumnIndexOrThrow("id")
-                val taskIndex = cursor.getColumnIndexOrThrow("task_name")
-                val startDateIndex = cursor.getColumnIndexOrThrow("start_date")
-                val dateIndex = cursor.getColumnIndexOrThrow("end_date")
-                val completedIndex = cursor.getColumnIndexOrThrow("completed")
-                val createdIndex = cursor.getColumnIndexOrThrow("created_at")
-                val completedAtIndex = cursor.getColumnIndexOrThrow("completed_at")
-                val imagePathIndex = cursor.getColumnIndexOrThrow("image_path")
-
                 while (cursor.moveToNext()) {
-                    val row: WritableMap = Arguments.createMap()
-
-                    row.putDouble(
-                        "id",
-                        cursor.getLong(idIndex).toDouble(),
-                    )
-
-                    row.putString(
-                        "task_name",
-                        cursor.getString(taskIndex),
-                    )
-
-                    row.putString(
-                        "start_date",
-                        cursor.getString(startDateIndex),
-                    )
-
-                    row.putString(
-                        "end_date",
-                        cursor.getString(dateIndex),
-                    )
-
-                    row.putDouble(
-                        "completed",
-                        cursor.getLong(completedIndex).toDouble(),
-                    )
-
-                    row.putString(
-                        "created_at",
-                        cursor.getString(createdIndex),
-                    )
-
-                    if (cursor.isNull(completedAtIndex)) {
-                        row.putNull("completed_at")
-                    } else {
-                        row.putString(
-                            "completed_at",
-                            cursor.getString(completedAtIndex),
-                        )
-                    }                    
-
-                    if (cursor.isNull(imagePathIndex)) {
-                        row.putNull("image_path")
-                    } else {
-                        row.putString(
-                            "image_path",
-                            cursor.getString(imagePathIndex),
-                        )
-                    }
-
-                    result.pushMap(row)
+                    result.pushMap(mapTodoRow(cursor))
                 }
             }
 
             promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject(ERROR_CODE, e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun getTodoById(
+        id: Double,
+        promise: Promise,
+    ) {
+        try {
+            val db = getDatabase()
+            db.rawQuery(
+                "SELECT id, task_name, start_date, end_date, completed, created_at, completed_at, image_path " +
+                    "FROM todos WHERE id = ?",
+                arrayOf(id.toLong().toString()),
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    promise.resolve(mapTodoRow(cursor))
+                } else {
+                    promise.resolve(null)
+                }
+            }
         } catch (e: Exception) {
             promise.reject(ERROR_CODE, e.message, e)
         }
@@ -302,6 +299,13 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                 ),
             )
 
+            // Keep notification history in sync when a task is renamed so the
+            // reminders list never shows a stale task name.
+            db.execSQL(
+                "UPDATE notifications SET task_name = ? WHERE todo_id = ?",
+                arrayOf<Any?>(taskName, todoId),
+            )
+
             // If due date was changed away from today, mark today's notification resolved and cancel Android notification
             val localToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
             if (endDate != localToday) {
@@ -358,29 +362,29 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
                     arrayOf<Any?>(todoId),
                 )
 
-                // If uncompleted and still due today, reactivate today's notification
+                // If uncompleted and still due today, reactivate today's
+                // notification through the SAME deduplication point used by the
+                // startup check and the daily WorkManager job: the history row
+                // is created when missing, un-resolved when present, and the
+                // Android notification is only shown when the row was actually
+                // changed (never twice for the same (todo_id, due_date)).
                 val localToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                var isDue = false
-                var taskName = ""
-                var dueDate = ""
-
                 db.rawQuery(
                     "SELECT task_name, end_date FROM todos WHERE id = ? AND end_date = ?",
                     arrayOf(todoId.toString(), localToday),
                 ).use { cursor ->
                     if (cursor.moveToFirst()) {
-                        isDue = true
-                        taskName = cursor.getString(cursor.getColumnIndexOrThrow("task_name"))
-                        dueDate = cursor.getString(cursor.getColumnIndexOrThrow("end_date"))
+                        val taskName = cursor.getString(cursor.getColumnIndexOrThrow("task_name"))
+                        val dueDate = cursor.getString(cursor.getColumnIndexOrThrow("end_date"))
+                        DueTaskNotifier.ensureDueTaskNotified(
+                            context = reactApplicationContext,
+                            db = db,
+                            todoId = todoId,
+                            taskName = taskName,
+                            dueDate = dueDate,
+                            notifiedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+                        )
                     }
-                }
-
-                if (isDue) {
-                    db.execSQL(
-                        "UPDATE notifications SET is_resolved = 0 WHERE todo_id = ?",
-                        arrayOf<Any?>(todoId),
-                    )
-                    NotificationHelper.showDueTaskNotification(reactApplicationContext, todoId, taskName, dueDate)
                 }
             }
 

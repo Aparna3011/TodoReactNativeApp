@@ -32,6 +32,7 @@ import {
   markAllAsRead,
   markAsRead,
 } from '../database/notificationRepository';
+import { getTodoById } from '../database/todoRepository';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Notifications'>;
 
@@ -65,6 +66,24 @@ function NotificationsScreen(): React.JSX.Element {
     if (item.is_read === 0) {
       await markAsRead(item.id);
       await loadNotifications();
+    }
+
+    try {
+      const todo = await getTodoById(item.todo_id);
+      if (todo) {
+        // Deep-link: open the corresponding task in the editor using todo_id.
+        navigation.navigate('EditTask', { todo });
+      } else {
+        // The task was deleted after the reminder fired; keep its history but
+        // explain why it cannot be opened.
+        Alert.alert(
+          'Task Unavailable',
+          'This task has been deleted. Its notification history is kept.',
+        );
+      }
+    } catch (error) {
+      console.error('Failed to open task from notification:', error);
+      Alert.alert('Error', 'Unable to open the task.');
     }
   };
 
