@@ -5,6 +5,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -12,7 +13,7 @@ import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import TaskImage from '../components/TaskImage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Bell } from 'lucide-react-native';
+import { Bell, Search, X } from 'lucide-react-native';
 
 import { getTodos, toggleTodo, deleteTodo } from '../database/todoRepository';
 import { getUnreadCount } from '../database/notificationRepository';
@@ -46,6 +47,7 @@ function HomeScreen(): React.JSX.Element {
 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
   const loadData = useCallback(async () => {
@@ -67,13 +69,25 @@ function HomeScreen(): React.JSX.Element {
     }, [loadData]),
   );
 
+  // Matches the task name (case-insensitive) against the search text. The search
+  // is combined with the active status filter so the list always shows only the
+  // tasks that match BOTH conditions.
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
   const filteredTodos = todos.filter(todo => {
-    if (filter === 'completed') {
-      return todo.completed === 1;
+    if (filter === 'completed' && todo.completed !== 1) {
+      return false;
     }
 
-    if (filter === 'pending') {
-      return todo.completed === 0;
+    if (filter === 'pending' && todo.completed !== 0) {
+      return false;
+    }
+
+    if (
+      normalizedQuery !== '' &&
+      !todo.task_name.toLowerCase().includes(normalizedQuery)
+    ) {
+      return false;
     }
 
     return true;
@@ -137,15 +151,40 @@ function HomeScreen(): React.JSX.Element {
           </TouchableOpacity>
 
           <View style={styles.countCircle}>
-            <Text style={styles.countText}>
-              {filter === 'all'
-                ? todos.length
-                : filter === 'pending'
-                ? todos.filter(todo => todo.completed === 0).length
-                : todos.filter(todo => todo.completed === 1).length}
-            </Text>
+            <Text style={styles.countText}>{filteredTodos.length}</Text>
           </View>
         </View>
+      </View>
+
+      <View style={styles.searchBar}>
+        <Search
+          size={18}
+          color="#888888"
+          style={styles.searchIcon}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search tasks by name"
+          placeholderTextColor="#999999"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          accessibilityLabel="Search tasks"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => setSearchQuery('')}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
+            <X size={18} color="#888888" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.filters}>
@@ -184,6 +223,7 @@ function HomeScreen(): React.JSX.Element {
           data={filteredTodos}
           keyExtractor={item => String(item.id)}
           ListHeaderComponent={listHeader}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: LIST_BOTTOM_PADDING },
@@ -280,10 +320,16 @@ function HomeScreen(): React.JSX.Element {
           }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No tasks found</Text>
+              <Text style={styles.emptyTitle}>
+                {todos.length === 0 ? 'No tasks found' : 'No matching tasks'}
+              </Text>
 
               <Text style={styles.emptySubtitle}>
-                Tap + to add your first task.
+                {todos.length === 0
+                  ? 'Tap + to add your first task.'
+                  : normalizedQuery !== ''
+                  ? 'Try a different search term.'
+                  : 'Try a different filter.'}
               </Text>
             </View>
           }
@@ -411,6 +457,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#000000',
+  },
+
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 42,
+    marginHorizontal: 20,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f1f3f5',
+  },
+
+  searchIcon: {
+    marginRight: 8,
+  },
+
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#222222',
+    paddingVertical: 0,
+  },
+
+  clearButton: {
+    padding: 4,
+    marginLeft: 4,
   },
 
   filters: {
