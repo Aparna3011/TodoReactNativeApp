@@ -406,6 +406,16 @@ class AndroidSQLiteModule(reactContext: ReactApplicationContext) :
             // Cancel active Android notification for this todo
             NotificationHelper.cancelDueTaskNotification(reactApplicationContext, todoId)
 
+            // Resolve the todo's notification history BEFORE deleting the row
+            // so a deleted task's reminder no longer contributes to the unread
+            // badge count, while the history row itself is kept for the user.
+            // (Without this the badge would stay > 0 forever, and a future todo
+            // reusing this id would inherit stale notifications.)
+            db.execSQL(
+                "UPDATE notifications SET is_resolved = 1 WHERE todo_id = ?",
+                arrayOf<Any?>(todoId),
+            )
+
             // Delete from todos (keeping notification history in SQLite)
             db.execSQL(
                 "DELETE FROM todos WHERE id = ?",

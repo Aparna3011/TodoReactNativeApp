@@ -18,12 +18,11 @@ import { Bell, Search, X } from 'lucide-react-native';
 import { getTodos, toggleTodo, deleteTodo } from '../database/todoRepository';
 import { getUnreadCount } from '../database/notificationRepository';
 import { getLocalTodayDateString, getTodoStatus } from '../utils/todoDate';
+import { filterTodos, type TodoFilter } from '../utils/todoFilter';
 import type { Todo } from '../types/todo';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
-
-type Filter = 'all' | 'pending' | 'completed';
 
 // Ordinary UI spacing constants (NOT safe-area values). The actual device
 // insets are applied at runtime by SafeAreaScreen / the bottom tab bar.
@@ -46,7 +45,7 @@ function HomeScreen(): React.JSX.Element {
   const navigation = useNavigation<NavigationProp>();
 
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<TodoFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
@@ -71,27 +70,12 @@ function HomeScreen(): React.JSX.Element {
 
   // Matches the task name (case-insensitive) against the search text. The search
   // is combined with the active status filter so the list always shows only the
-  // tasks that match BOTH conditions.
+  // tasks that match BOTH conditions. The filtering rule lives in
+  // ../utils/todoFilter so the exact same semantics can be reused and tested
+  // independently of the UI.
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  const filteredTodos = todos.filter(todo => {
-    if (filter === 'completed' && todo.completed !== 1) {
-      return false;
-    }
-
-    if (filter === 'pending' && todo.completed !== 0) {
-      return false;
-    }
-
-    if (
-      normalizedQuery !== '' &&
-      !todo.task_name.toLowerCase().includes(normalizedQuery)
-    ) {
-      return false;
-    }
-
-    return true;
-  });
+  const filteredTodos = filterTodos(todos, filter, searchQuery);
 
   const handleToggle = async (todo: Todo) => {
     try {
