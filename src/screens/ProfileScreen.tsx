@@ -2,12 +2,28 @@ import React, { useCallback, useState } from 'react';
 import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
 import { useFocusEffect } from '@react-navigation/native';
-import { CircleCheck, Clock, ListTodo, UserRound } from 'lucide-react-native';
+import {
+  AppWindow,
+  CalendarClock,
+  CircleCheck,
+  Gauge,
+  Hourglass,
+  Info,
+  TriangleAlert,
+  UserRound,
+} from 'lucide-react-native';
 
+import appInfo from '../../app.json';
+import packageInfo from '../../package.json';
 import { getTodos } from '../database/todoRepository';
 import type { Todo } from '../types/todo';
+import { getTodoStatus } from '../utils/todoDate';
 
-type StatRow = {
+/** App identity shown in the About card (kept in sync with app.json / package.json). */
+const APP_NAME = appInfo.displayName;
+const APP_VERSION = packageInfo.version;
+
+type StatusRow = {
   label: string;
   value: number;
   Icon: React.ComponentType<{ size?: number; color?: string }>;
@@ -35,29 +51,57 @@ function ProfileScreen(): React.JSX.Element {
 
   const totalTasks = todos.length;
   const completedTasks = todos.filter(todo => todo.completed === 1).length;
-  const pendingTasks = todos.filter(todo => todo.completed === 0).length;
 
-  const rows: StatRow[] = [
+  // Status counts are derived in a single pass over the loaded tasks using the
+  // same getTodoStatus rule the Tasks/Calendar screens rely on, so this
+  // breakdown can never disagree with the rest of the app. Completed tasks are
+  // counted above, and a task falls into exactly one of the remaining states.
+  let dueToday = 0;
+  let overdue = 0;
+  let upcoming = 0;
+
+  todos.forEach(todo => {
+    const status = getTodoStatus(todo);
+    if (status === 'DUE TODAY') {
+      dueToday += 1;
+    } else if (status === 'OVERDUE') {
+      overdue += 1;
+    } else if (status === 'UPCOMING') {
+      upcoming += 1;
+    }
+  });
+
+  const completionPercent =
+    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  const statusRows: StatusRow[] = [
     {
-      label: 'Total Tasks',
-      value: totalTasks,
-      Icon: ListTodo,
-      iconColor: '#4a6edb',
-      iconBackground: '#e8edfb',
-    },
-    {
-      label: 'Completed Tasks',
+      label: 'Completed',
       value: completedTasks,
       Icon: CircleCheck,
       iconColor: '#2e9e4f',
       iconBackground: '#e6f5ea',
     },
     {
-      label: 'Pending Tasks',
-      value: pendingTasks,
-      Icon: Clock,
-      iconColor: '#d99a1b',
-      iconBackground: '#fbf1de',
+      label: 'Due Today',
+      value: dueToday,
+      Icon: CalendarClock,
+      iconColor: '#1d4ed8',
+      iconBackground: '#eff6ff',
+    },
+    {
+      label: 'Overdue',
+      value: overdue,
+      Icon: TriangleAlert,
+      iconColor: '#dc2626',
+      iconBackground: '#fef2f2',
+    },
+    {
+      label: 'Upcoming',
+      value: upcoming,
+      Icon: Hourglass,
+      iconColor: '#4b5563',
+      iconBackground: '#f3f4f6',
     },
   ];
 
@@ -66,24 +110,50 @@ function ProfileScreen(): React.JSX.Element {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.avatar}>
+            <UserRound size={44} color="#222222" />
+          </View>
+
+          <Text style={styles.title}>Profile</Text>
+          <Text style={styles.subtitle}>Your personal task overview</Text>
+        </View>
+
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <View style={styles.avatar}>
-              <UserRound size={42} color="#222222" />
-            </View>
-
-            <Text style={styles.title}>Profile</Text>
-            <Text style={styles.subtitle}>Your task overview</Text>
-          </View>
-
-          <Text style={styles.sectionTitle}>Task Management</Text>
+          {/* <Text style={styles.sectionTitle}>Overview</Text>
 
           <View style={styles.card}>
-            {rows.map((row, index) => {
+            <View style={styles.row}>
+              <View style={[styles.rowIcon, styles.rowIconAccent]}>
+                <Gauge size={22} color="#4a6edb" />
+              </View>
+
+              <Text style={styles.rowLabel}>Completion Rate</Text>
+
+              <Text style={styles.rowValue}>{completionPercent}%</Text>
+            </View>
+
+            <View style={styles.progressTrack}>
+              <View
+                style={[styles.progressFill, { width: `${completionPercent}%` }]}
+              />
+            </View>
+
+            <Text style={styles.progressCaption}>
+              {totalTasks > 0
+                ? `${completedTasks} of ${totalTasks} tasks completed`
+                : 'No tasks yet — add your first task to get started.'}
+            </Text>
+          </View> */}
+
+          <Text style={styles.sectionTitle}>Task Status</Text>
+
+          <View style={styles.card}>
+            {statusRows.map((row, index) => {
               const RowIcon = row.Icon;
 
               return (
@@ -91,7 +161,7 @@ function ProfileScreen(): React.JSX.Element {
                   key={row.label}
                   style={[
                     styles.row,
-                    index < rows.length - 1 && styles.rowBorder,
+                    index < statusRows.length - 1 && styles.rowBorder,
                   ]}
                 >
                   <View
@@ -111,9 +181,33 @@ function ProfileScreen(): React.JSX.Element {
             })}
           </View>
 
+          <Text style={styles.sectionTitle}>About</Text>
+
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View style={[styles.rowIcon, styles.rowIconAccent]}>
+                <AppWindow size={22} color="#4a6edb" />
+              </View>
+
+              <Text style={styles.rowLabel}>App</Text>
+
+              <Text style={styles.rowValueText}>{APP_NAME}</Text>
+            </View>
+
+            <View style={[styles.row, styles.rowBorder]}>
+              <View style={[styles.rowIcon, styles.rowIconAccent]}>
+                <Info size={22} color="#4a6edb" />
+              </View>
+
+              <Text style={styles.rowLabel}>Version</Text>
+
+              <Text style={styles.rowValueText}>{APP_VERSION}</Text>
+            </View>
+          </View>
+
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              Statistics are derived from your existing tasks.
+              Your task data stays on this device.
             </Text>
           </View>
         </ScrollView>
@@ -145,8 +239,8 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 28,
-    paddingBottom: 22,
+    paddingTop: 24,
+    paddingBottom: 20,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#eeeeee',
@@ -215,6 +309,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
 
+  rowIconAccent: {
+    backgroundColor: '#e8edfb',
+  },
+
   rowLabel: {
     flex: 1,
     fontSize: 15,
@@ -226,6 +324,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#333333',
+  },
+
+  rowValueText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333333',
+  },
+
+  progressTrack: {
+    marginTop: 16,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#eeeeee',
+    overflow: 'hidden',
+  },
+
+  progressFill: {
+    height: '100%',
+    borderRadius: 5,
+    backgroundColor: '#2e9e4f',
+  },
+
+  progressCaption: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#666666',
   },
 
   footer: {
