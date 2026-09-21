@@ -7,7 +7,11 @@ import React, {
 } from 'react';
 import { AppState, ScrollView, StatusBar, View } from 'react-native';
 import SafeAreaScreen, { TAB_SCREEN_EDGES } from '../components/SafeAreaScreen';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useNavigationState,
+} from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Calendar } from 'react-native-calendars';
 
@@ -62,12 +66,44 @@ function CalendarScreen(): React.JSX.Element {
   const [, setTodayTick] = useState(0);
 
   /*
-   * Which month the calendar should display. Updated only when
-   * "today" rolls over into a new month, so the view follows the
-   * live date after a midnight month roll-over. User navigation
-   * with the calendar arrows is never overridden.
+   * Which month the Calendar should initially display. Set to today's
+   * month so the first visit anchors on the current month; reset to today's
+   * month whenever the user returns from another bottom tab.
    */
   const [calendarAnchor, setCalendarAnchor] = useState(getTodayDateString());
+  const [calendarKey, setCalendarKey] = useState(0);
+
+  /*
+   * Tab-switch lifecycle tracking:
+   * When the user switches to another bottom tab (Tasks, Stats, Profile),
+   * isCalendarTab becomes false and wasInactiveRef is flagged.
+   * When returning to the Calendar tab, the selection and visible month
+   * reset to today's date.
+   * When opening a child screen (AddTask / DateTasks / EditTask) from
+   * Calendar, the bottom tab never changes, so the selected date is preserved.
+   */
+  const wasInactiveRef = useRef(false);
+
+  const isCalendarTab = useNavigationState(state => {
+    if (!state || !state.routes || state.index === undefined) {
+      return true;
+    }
+    const currentRoute = state.routes[state.index];
+    return currentRoute?.name === 'Calendar';
+  });
+
+  useEffect(() => {
+    if (!isCalendarTab) {
+      wasInactiveRef.current = true;
+    } else if (wasInactiveRef.current) {
+      wasInactiveRef.current = false;
+      const today = getTodayDateString();
+      setSelectedDate(today);
+      setCalendarAnchor(today);
+      setCalendarKey(k => k + 1);
+      lastTodayRef.current = today;
+    }
+  }, [isCalendarTab]);
 
   /* =======================================================
      LOAD TODOS
@@ -83,21 +119,37 @@ function CalendarScreen(): React.JSX.Element {
   }, []);
 
   /* =======================================================
-     LIVE "TODAY" SYNC
+     FOCUS HOOK (REFRESH TASKS ONLY)
      ======================================================= */
 
+  useFocusEffect(
+    useCallback(() => {
+      /*
+       * Refresh the task chips every time this screen gains focus.
+       *
+       * The selected date and visible month are managed by the tab-switch
+       * lifecycle hook above, so returning from a child screen (AddTask /
+       * DateTasks / EditTask) preserves the user's chosen date.
+       */
+      loadTodos();
+    }, [loadTodos]),
+  );
+
+  /* =======================================================
+     LIVE "TODAY" SYNC (BACKGROUND RETURN)
+     ======================================================= */
+
+  /*
+   * The Calendar tab stays mounted while the app is backgrounded.
+   * When the app comes back (possibly on a new day), refresh "today"
+   * so the today marker and the selection follow the real current
+   * date. A date the user picked manually is never overridden.
+   */
   const syncToLiveToday = useCallback(() => {
     const today = getTodayDateString();
 
     const prevToday = lastTodayRef.current;
 
-    /*
-     * If the calendar was still pointing at what used to be "today"
-     * (for example the app stayed open overnight), advance the
-     * selection onto the new current date.
-     *
-     * A date the user picked manually is never overridden.
-     */
     if (selectedDate === prevToday) {
       setSelectedDate(today);
 
@@ -114,24 +166,6 @@ function CalendarScreen(): React.JSX.Element {
     lastTodayRef.current = today;
   }, [selectedDate]);
 
-  useFocusEffect(
-    useCallback(() => {
-      /*
-       * Every time this tab gains focus, refresh "today" so the
-       * calendar keeps pointing at the real current date.
-       */
-      syncToLiveToday();
-
-      loadTodos();
-    }, [syncToLiveToday, loadTodos]),
-  );
-
-  /*
-   * The Calendar tab stays mounted while the app is backgrounded.
-   * When the app comes back (possibly on a new day), refresh the
-   * calendar so the today marker and the selection follow the
-   * real current date.
-   */
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
       if (nextState === 'active') {
@@ -267,6 +301,7 @@ function CalendarScreen(): React.JSX.Element {
 
           <View style={styles.calendarWrapper}>
             <Calendar
+              key={`calendar-${calendarKey}`}
               current={selectedDate}
               initialDate={calendarAnchor}
               markedDates={markedDates}
