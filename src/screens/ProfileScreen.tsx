@@ -6,7 +6,6 @@ import {
   AppWindow,
   CalendarClock,
   CircleCheck,
-  Gauge,
   Hourglass,
   Info,
   TriangleAlert,
@@ -49,7 +48,6 @@ function ProfileScreen(): React.JSX.Element {
     }, [loadTodos]),
   );
 
-  const totalTasks = todos.length;
   const completedTasks = todos.filter(todo => todo.completed === 1).length;
 
   // Status counts are derived in a single pass over the loaded tasks using the
@@ -70,9 +68,6 @@ function ProfileScreen(): React.JSX.Element {
       upcoming += 1;
     }
   });
-
-  const completionPercent =
-    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   const statusRows: StatusRow[] = [
     {
